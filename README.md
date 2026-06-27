@@ -20,6 +20,22 @@ The private file is ignored by git.
 
 This fork also includes a `Guruguru` launcher menu based on the private `kameware/M5Stopwatch` firmware. It embeds the 9 direction avatar PNGs and switches the face direction from touch position.
 
+## Phone notifications
+
+The `Notify` launcher menu starts a BLE GATT receiver for phone notifications. The watch advertises as `M5StopWatch`.
+
+- Service UUID: `7b3f0001-6d6f-4d35-9d65-534d53545700`
+- Write characteristic UUID: `7b3f0002-6d6f-4d35-9d65-534d53545700`
+- Status characteristic UUID: `7b3f0003-6d6f-4d35-9d65-534d53545700`
+
+Write UTF-8 JSON to the write characteristic:
+
+```json
+{"app":"Messages","title":"Alice","body":"Hello from phone"}
+```
+
+Android needs a companion app with `NotificationListenerService` permission to forward system notifications to this BLE characteristic. iPhone direct notification mirroring requires Apple ANCS pairing support and is not included in this receiver.
+
 ## Build
 
 ### Fetch Dependencies

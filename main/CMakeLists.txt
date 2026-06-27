@@ -26,6 +26,7 @@ idf_component_register(
     SRCS 
         "main.cpp"
         "wifi_time_sync.cpp"
+        "phone_notifications.cpp"
         ${MY_SRCS}
     INCLUDE_DIRS 
         ${MY_INCS}

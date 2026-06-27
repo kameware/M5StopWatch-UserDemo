@@ -12,6 +12,7 @@
 #include <lv_demos.h>
 #include <apps/common/audio/audio.h>
 #include "wifi_time_sync.h"
+#include "phone_notifications.h"
 
 using namespace mooncake;
 using namespace smooth_ui_toolkit;
@@ -26,6 +27,7 @@ extern "C" void app_main(void)
     GetHAL().init();
     GetHAL().setTimezone("JST-9");
     sync_time_from_wifi();
+    phone_notifications_init();
 
     // Setup ui hal
     ui_hal::on_delay([](uint32_t ms) { GetHAL().delay(ms); });
@@ -37,6 +39,7 @@ extern "C" void app_main(void)
     GetMooncake().installApp(std::make_unique<AppWatchFace>());
     GetMooncake().installApp(std::make_unique<AppStopWatch>());
     GetMooncake().installApp(std::make_unique<AppBadge>());
+    GetMooncake().installApp(std::make_unique<AppNotifications>());
     GetMooncake().installApp(std::make_unique<AppImu>());
     GetMooncake().installApp(std::make_unique<AppFft>());
     GetMooncake().installApp(std::make_unique<AppLuckyWheel>());
