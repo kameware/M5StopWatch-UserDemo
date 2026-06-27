@@ -25,6 +25,7 @@ inline constexpr const char* PHONE_NOTIFICATION_STATUS_UUID  = "7b3f0003-6d6f-4d
 void phone_notifications_init();
 bool phone_notifications_is_ble_ready();
 bool phone_notifications_is_connected();
+bool phone_notifications_is_ancs_ready();
 uint32_t phone_notifications_count();
 uint32_t phone_notifications_latest_sequence();
 std::vector<PhoneNotification> phone_notifications_recent(std::size_t max_count);

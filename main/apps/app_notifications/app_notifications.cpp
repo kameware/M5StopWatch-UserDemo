@@ -162,11 +162,12 @@ void AppNotifications::update_ui(bool force)
     }
     _last_sequence = sequence;
 
-    const bool ready     = phone_notifications_is_ble_ready();
-    const bool connected = phone_notifications_is_connected();
-    auto recent          = phone_notifications_recent(4);
+    const bool ready      = phone_notifications_is_ble_ready();
+    const bool connected  = phone_notifications_is_connected();
+    const bool ancs_ready = phone_notifications_is_ancs_ready();
+    auto recent           = phone_notifications_recent(4);
 
-    lv_label_set_text(_status, connected ? "BLE connected" : (ready ? "BLE waiting" : "BLE starting"));
+    lv_label_set_text(_status, ancs_ready ? "iPhone ANCS ready" : (connected ? "BLE connected" : (ready ? "BLE waiting" : "BLE starting")));
 
     char count_text[32] {};
     std::snprintf(count_text, sizeof(count_text), "%lu received", static_cast<unsigned long>(phone_notifications_count()));

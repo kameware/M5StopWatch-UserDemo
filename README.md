@@ -22,7 +22,9 @@ This fork also includes a `Guruguru` launcher menu based on the private `kamewar
 
 ## Phone notifications
 
-The `Notify` launcher menu starts a BLE GATT receiver for phone notifications. The watch advertises as `M5StopWatch`.
+The `Notify` launcher menu starts a BLE receiver for phone notifications. The watch advertises as `M5StopWatch`.
+
+Android companion apps can write notifications to the custom service:
 
 - Service UUID: `7b3f0001-6d6f-4d35-9d65-534d53545700`
 - Write characteristic UUID: `7b3f0002-6d6f-4d35-9d65-534d53545700`
@@ -34,7 +36,9 @@ Write UTF-8 JSON to the write characteristic:
 {"app":"Messages","title":"Alice","body":"Hello from phone"}
 ```
 
-Android needs a companion app with `NotificationListenerService` permission to forward system notifications to this BLE characteristic. iPhone direct notification mirroring requires Apple ANCS pairing support and is not included in this receiver.
+Android needs a companion app with `NotificationListenerService` permission to forward system notifications to this BLE characteristic.
+
+iPhone notifications use Apple ANCS. Pair/connect the iPhone to `M5StopWatch`; after encryption succeeds the firmware subscribes to ANCS Notification Source and Data Source, then incoming iOS notifications appear in the same `Notify` history. No iOS app is required.
 
 ## Build
 
