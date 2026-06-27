@@ -860,32 +860,29 @@ void advertise()
         return;
     }
 
-    ble_hs_adv_fields fields {};
-    fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
-    fields.tx_pwr_lvl_is_present = 1;
-    fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
-    fields.sol_uuids128 = &k_ancs_service_uuid;
-    fields.sol_num_uuids128 = 1;
-    static constexpr const char* k_short_name = "M5SW";
-    fields.name = reinterpret_cast<const uint8_t*>(k_short_name);
-    fields.name_len = std::strlen(k_short_name);
-    fields.name_is_complete = 0;
+    static constexpr uint8_t k_adv_data[] = {
+        0x02, BLE_HS_ADV_TYPE_FLAGS, BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP,
+        0x11, BLE_HS_ADV_TYPE_SOL_UUIDS128,
+        0xD0, 0x00, 0x2D, 0x12, 0x1E, 0x4B, 0x0F, 0xA4, 0x99, 0x4E, 0xCE, 0xB5, 0x31, 0xF4, 0x05, 0x79,
+        0x05, BLE_HS_ADV_TYPE_INCOMP_NAME, 'M', '5', 'S', 'W',
+        0x03, BLE_HS_ADV_TYPE_APPEARANCE, 0xC0, 0x00,
+    };
+    static_assert(sizeof(k_adv_data) <= BLE_HS_ADV_MAX_SZ, "advertising data must fit legacy BLE advertising");
 
-    int rc = ble_gap_adv_set_fields(&fields);
+    int rc = ble_gap_adv_set_data(k_adv_data, sizeof(k_adv_data));
     if (rc != 0) {
         ESP_LOGE(TAG, "adv fields failed: %d", rc);
         return;
     }
 
-    const char* name = ble_svc_gap_device_name();
-    ble_hs_adv_fields response {};
-    response.uuids128 = &k_service_uuid;
-    response.num_uuids128 = 1;
-    response.uuids128_is_complete = 1;
-    response.name = reinterpret_cast<const uint8_t*>(name);
-    response.name_len = std::strlen(name);
-    response.name_is_complete = 1;
-    rc = ble_gap_adv_rsp_set_fields(&response);
+    static constexpr uint8_t k_scan_response_data[] = {
+        0x11, BLE_HS_ADV_TYPE_COMP_UUIDS128,
+        0x00, 0x57, 0x54, 0x53, 0x4D, 0x53, 0x65, 0x9D, 0x35, 0x4D, 0x6F, 0x6D, 0x01, 0x00, 0x3F, 0x7B,
+        0x0C, BLE_HS_ADV_TYPE_COMP_NAME, 'M', '5', 'S', 't', 'o', 'p', 'W', 'a', 't', 'c', 'h',
+    };
+    static_assert(sizeof(k_scan_response_data) <= BLE_HS_ADV_MAX_SZ, "scan response data must fit legacy BLE advertising");
+
+    rc = ble_gap_adv_rsp_set_data(k_scan_response_data, sizeof(k_scan_response_data));
     if (rc != 0) {
         ESP_LOGW(TAG, "scan response fields failed: %d", rc);
     }
