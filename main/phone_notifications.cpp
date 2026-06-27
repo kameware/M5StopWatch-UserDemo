@@ -862,9 +862,14 @@ void advertise()
 
     ble_hs_adv_fields fields {};
     fields.flags = BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP;
-    fields.uuids128 = &k_service_uuid;
-    fields.num_uuids128 = 1;
-    fields.uuids128_is_complete = 1;
+    fields.tx_pwr_lvl_is_present = 1;
+    fields.tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO;
+    fields.sol_uuids128 = &k_ancs_service_uuid;
+    fields.sol_num_uuids128 = 1;
+    static constexpr const char* k_short_name = "M5SW";
+    fields.name = reinterpret_cast<const uint8_t*>(k_short_name);
+    fields.name_len = std::strlen(k_short_name);
+    fields.name_is_complete = 0;
 
     int rc = ble_gap_adv_set_fields(&fields);
     if (rc != 0) {
@@ -874,6 +879,9 @@ void advertise()
 
     const char* name = ble_svc_gap_device_name();
     ble_hs_adv_fields response {};
+    response.uuids128 = &k_service_uuid;
+    response.num_uuids128 = 1;
+    response.uuids128_is_complete = 1;
     response.name = reinterpret_cast<const uint8_t*>(name);
     response.name_len = std::strlen(name);
     response.name_is_complete = 1;
@@ -885,6 +893,8 @@ void advertise()
     ble_gap_adv_params params {};
     params.conn_mode = BLE_GAP_CONN_MODE_UND;
     params.disc_mode = BLE_GAP_DISC_MODE_GEN;
+    params.itvl_min = BLE_GAP_ADV_FAST_INTERVAL1_MIN;
+    params.itvl_max = BLE_GAP_ADV_FAST_INTERVAL1_MAX;
 
     rc = ble_gap_adv_start(g_own_addr_type, nullptr, BLE_HS_FOREVER, &params, [](ble_gap_event* event, void* arg) -> int {
         (void)arg;
