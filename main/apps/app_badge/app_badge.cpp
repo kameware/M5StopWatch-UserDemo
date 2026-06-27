@@ -34,8 +34,8 @@ void AppBadge::onOpen()
 
     _badge_view = std::make_unique<view::BadgeView>();
     _badge_view->init(lv_screen_active());
-    if (_badge_view->imageObject() != nullptr) {
-        bool loaded = GetHAL().loadBadgeImage(_badge_view->imageObject());
+    if (_badge_view->imageObject() != nullptr || _badge_view->gifObject() != nullptr) {
+        bool loaded = GetHAL().loadBadgeImage({_badge_view->imageObject(), _badge_view->gifObject()});
         _badge_view->setShowEditHint(!loaded);
     }
 }
@@ -54,12 +54,12 @@ void AppBadge::onRunning()
 
     LvglLockGuard lock;
 
-    if (_badge_view && _badge_view->imageObject() != nullptr) {
+    if (_badge_view && (_badge_view->imageObject() != nullptr || _badge_view->gifObject() != nullptr)) {
         if (event == input::KeyEvent::GoPrevious) {
-            bool loaded = GetHAL().loadPreviousBadgeImage(_badge_view->imageObject());
+            bool loaded = GetHAL().loadPreviousBadgeImage({_badge_view->imageObject(), _badge_view->gifObject()});
             _badge_view->setShowEditHint(!loaded);
         } else if (event == input::KeyEvent::GoNext) {
-            bool loaded = GetHAL().loadNextBadgeImage(_badge_view->imageObject());
+            bool loaded = GetHAL().loadNextBadgeImage({_badge_view->imageObject(), _badge_view->gifObject()});
             _badge_view->setShowEditHint(!loaded);
         }
     }
@@ -71,6 +71,7 @@ void AppBadge::onRunning()
     if (_badge_view && _badge_view->consumeEditRequested()) {
         mclog::info("start badge edit mode");
         auto loading_page = std::make_unique<view::LoadingPage>(0x2B2B2B, 0xFFFFFF);
+        GetHAL().stopBadgeAnimation();
         GetHAL().lvglUnlock();
         GetHAL().startBadgeEditModeViaAp([&](std::string_view msg) {
             LvglLockGuard lock;
@@ -79,8 +80,8 @@ void AppBadge::onRunning()
         GetHAL().lvglLock();
 
         // Reload image
-        if (_badge_view->imageObject() != nullptr) {
-            bool loaded = GetHAL().loadBadgeImage(_badge_view->imageObject());
+        if (_badge_view->imageObject() != nullptr || _badge_view->gifObject() != nullptr) {
+            bool loaded = GetHAL().loadBadgeImage({_badge_view->imageObject(), _badge_view->gifObject()});
             _badge_view->setShowEditHint(!loaded);
         }
     }
@@ -94,5 +95,6 @@ void AppBadge::onClose()
 
     LvglLockGuard lock;
 
+    GetHAL().stopBadgeAnimation();
     _badge_view.reset();
 }

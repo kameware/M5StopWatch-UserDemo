@@ -187,6 +187,8 @@ public:
     /* ---------------------------------- Audio --------------------------------- */
     void setSpeakerVolume(int volume, bool saveToSettings = false);
     int getSpeakerVolume(bool loadFromSettings = false);
+    void setSpeakerMuted(bool muted, bool saveToSettings = false);
+    bool isSpeakerMuted(bool loadFromSettings = false);
     int getAudioSampleRate();
     void audioRecord(std::vector<int16_t>& data, uint16_t durationMs, float gain = 30.0f);
     void audioPlay(std::vector<int16_t>& data, bool async = true);
@@ -252,9 +254,18 @@ public:
     const ButtonConfig& getButtonConfig(bool loadFromSettings = false);
 
     /* ---------------------------------- Badge --------------------------------- */
+    struct BadgeRenderTarget {
+        lv_obj_t* image = nullptr;
+        lv_obj_t* gif   = nullptr;
+    };
+
+    bool loadBadgeImage(const BadgeRenderTarget& target);
+    bool loadNextBadgeImage(const BadgeRenderTarget& target);
+    bool loadPreviousBadgeImage(const BadgeRenderTarget& target);
     bool loadBadgeImage(lv_obj_t* image);
     bool loadNextBadgeImage(lv_obj_t* image);
     bool loadPreviousBadgeImage(lv_obj_t* image);
+    void stopBadgeAnimation();
     void startBadgeEditModeViaAp(std::function<void(std::string_view)> onLog);
 
     /* ---------------------------------- Guide --------------------------------- */
@@ -269,6 +280,7 @@ private:
     AudioSpectrumFrame _audio_spectrum;
     int _bl_brightness = 80;
     int _spk_volume    = 80;
+    bool _spk_muted    = false;
 
     void i2c_init();
     void i2c_detect();

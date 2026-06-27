@@ -112,8 +112,8 @@ void BadgeView::setShowEditHint(bool show)
         _edit_hint_label->setHidden(!show);
     }
 
-    if (_image) {
-        _image->setHidden(show);
+    if (_image && show) {
+        _image->setHidden(true);
     }
 }
 

@@ -10,6 +10,14 @@ file(GLOB_RECURSE MY_SRCS
     "hal/*.cpp"
 )
 
+set(MY_EXTRA_SRCS
+    "apps/app_guruguru/app_guruguru.cpp"
+    "apps/app_guruguru/view/view.cpp"
+    "assets/images/guruguru/guruguru_avatar_images.c"
+)
+list(APPEND MY_SRCS ${MY_EXTRA_SRCS})
+list(REMOVE_DUPLICATES MY_SRCS)
+
 set(MY_INCS
     "."
 )
@@ -17,6 +25,7 @@ set(MY_INCS
 idf_component_register(
     SRCS 
         "main.cpp"
+        "wifi_time_sync.cpp"
         ${MY_SRCS}
     INCLUDE_DIRS 
         ${MY_INCS}

@@ -21,7 +21,7 @@ static const std::vector<int> _label_y_map        = {0, 0, -2, -1, -1};
 
 void ArcTopClock::init()
 {
-    setSize(114, 36);
+    setSize(154, 36);
     setBorderWidth(0);
     setOutlineWidth(0);
     setPaddingAll(0);
@@ -38,7 +38,14 @@ void ArcTopClock::init()
         labels[i]->setRotation(_label_rotation_map[i]);
     }
 
+    mute_icon = std::make_unique<Label>(get());
+    mute_icon->setText(LV_SYMBOL_MUTE);
+    mute_icon->setTextFont(&lv_font_montserrat_22);
+    mute_icon->setTextColor(lv_color_hex(color));
+    mute_icon->align(LV_ALIGN_CENTER, 74, -3);
+
     update(true);
+    update_mute_icon(true);
 }
 
 void ArcTopClock::update(bool force)
@@ -50,6 +57,8 @@ void ArcTopClock::update(bool force)
         // set_clock_to("00:00");
         update_time_count = GetHAL().millis();
     }
+
+    update_mute_icon(force);
 }
 
 void ArcTopClock::set_clock_to(const std::string_view text)
@@ -62,5 +71,18 @@ void ArcTopClock::set_clock_to(const std::string_view text)
             char buf[2] = {text[i], '\0'};
             labels[i]->setText(buf);
         }
+    }
+}
+
+void ArcTopClock::update_mute_icon(bool force)
+{
+    if (!mute_icon) {
+        return;
+    }
+
+    bool muted = GetHAL().isSpeakerMuted();
+    if (force || muted != last_muted) {
+        mute_icon->setHidden(!muted);
+        last_muted = muted;
     }
 }

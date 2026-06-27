@@ -133,6 +133,189 @@ private:
     bool _syncing_slider = false;
 };
 
+class VolumeWorker::VolumeAdjustView {
+public:
+    VolumeAdjustView(int initialVolume, bool initialMuted)
+    {
+        _current_volume = normalizeValue(initialVolume);
+        _current_muted  = initialMuted;
+
+        _panel = std::make_unique<Container>(lv_screen_active());
+        _panel->align(LV_ALIGN_CENTER, 0, 0);
+        _panel->setSize(466, 466);
+        _panel->setRadius(0);
+        _panel->setBorderWidth(0);
+        _panel->setPaddingAll(0);
+        _panel->setBgColor(lv_color_hex(0x000000));
+        _panel->setBgOpa(LV_OPA_COVER);
+        _panel->removeFlag(LV_OBJ_FLAG_SCROLLABLE);
+
+        _value_label = std::make_unique<Label>(_panel->get());
+        _value_label->align(LV_ALIGN_TOP_MID, 0, 40);
+        _value_label->setTextFont(&CommissionerMedium108);
+        _value_label->setTextColor(lv_color_hex(0xFFFFFF));
+
+        _mute_icon_label = std::make_unique<Label>(_panel->get());
+        _mute_icon_label->setText(LV_SYMBOL_MUTE);
+        _mute_icon_label->setTextFont(&lv_font_montserrat_28);
+        _mute_icon_label->setTextColor(lv_color_hex(0xC8C8C8));
+        _mute_icon_label->align(LV_ALIGN_TOP_MID, 104, 90);
+
+        _slider = std::make_unique<Slider>(_panel->get());
+        _slider->align(LV_ALIGN_CENTER, 0, -32);
+        _slider->setSize(374, 24);
+        _slider->setRange(0, 100, false);
+        _slider->setValue(_current_volume);
+        _slider->setBgColor(lv_color_hex(0x343434), LV_PART_MAIN);
+        _slider->setBgOpa(LV_OPA_COVER, LV_PART_MAIN);
+        _slider->setBorderWidth(0, LV_PART_MAIN);
+        _slider->setRadius(LV_RADIUS_CIRCLE, LV_PART_MAIN);
+        _slider->setBgColor(lv_color_hex(0x4AD78C), LV_PART_INDICATOR);
+        _slider->setBgOpa(LV_OPA_COVER, LV_PART_INDICATOR);
+        _slider->setBorderWidth(0, LV_PART_INDICATOR);
+        _slider->setRadius(LV_RADIUS_CIRCLE, LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(_slider->get(), lv_color_hex(0xFFFFFF), LV_PART_KNOB);
+        lv_obj_set_style_bg_opa(_slider->get(), LV_OPA_COVER, LV_PART_KNOB);
+        lv_obj_set_style_border_width(_slider->get(), 0, LV_PART_KNOB);
+        lv_obj_set_style_radius(_slider->get(), LV_RADIUS_CIRCLE, LV_PART_KNOB);
+        _slider->onValueChanged().connect([this](int32_t value) {
+            if (_syncing_slider) {
+                return;
+            }
+
+            int normalized = normalizeValue(static_cast<int>(value));
+            if (normalized != value) {
+                _syncing_slider = true;
+                _slider->setValue(normalized);
+                _syncing_slider = false;
+            }
+
+            _current_volume = normalized;
+            updateVolumeUi();
+        });
+
+        createMuteRow();
+
+        _ok_button = std::make_unique<Button>(_panel->get());
+        _ok_button->align(LV_ALIGN_CENTER, 0, 160);
+        _ok_button->setSize(374, 98);
+        _ok_button->setRadius(49);
+        _ok_button->setBorderWidth(0);
+        _ok_button->setShadowWidth(0);
+        _ok_button->setBgColor(lv_color_hex(0x4AD78C));
+        _ok_button->label().setText("OK");
+        _ok_button->label().setTextFont(&lv_font_montserrat_28);
+        _ok_button->label().setTextColor(lv_color_hex(0x0F5831));
+        _ok_button->label().align(LV_ALIGN_CENTER, 0, 0);
+        _ok_button->onClick().connect([this]() { _save_requested = true; });
+
+        updateVolumeUi();
+    }
+
+    int currentVolume() const
+    {
+        return _current_volume;
+    }
+
+    bool currentMuted() const
+    {
+        return _current_muted;
+    }
+
+    bool consumeSaveRequested()
+    {
+        bool requested  = _save_requested;
+        _save_requested = false;
+        return requested;
+    }
+
+private:
+    int normalizeValue(int value) const
+    {
+        int clamped = uitk::clamp(value, 0, 100);
+        return uitk::clamp(((clamped + 2) / 5) * 5, 0, 100);
+    }
+
+    void createMuteRow()
+    {
+        _mute_row = std::make_unique<Container>(_panel->get());
+        _mute_row->setSize(374, 72);
+        _mute_row->align(LV_ALIGN_CENTER, 0, 54);
+        _mute_row->setBgColor(lv_color_hex(0x1C1C1E));
+        _mute_row->setBgOpa(LV_OPA_COVER);
+        _mute_row->setBorderWidth(0);
+        _mute_row->setShadowWidth(0);
+        _mute_row->setRadius(36);
+        _mute_row->setPaddingAll(0);
+        _mute_row->removeFlag(LV_OBJ_FLAG_SCROLLABLE);
+
+        _mute_row_icon = std::make_unique<Label>(_mute_row->get());
+        _mute_row_icon->setText(LV_SYMBOL_MUTE);
+        _mute_row_icon->setTextFont(&lv_font_montserrat_28);
+        _mute_row_icon->setTextColor(lv_color_hex(0xFFFFFF));
+        _mute_row_icon->align(LV_ALIGN_LEFT_MID, 32, 1);
+
+        _mute_row_label = std::make_unique<Label>(_mute_row->get());
+        _mute_row_label->setText("Mute");
+        _mute_row_label->setTextFont(&lv_font_montserrat_24);
+        _mute_row_label->setTextColor(lv_color_hex(0xFFFFFF));
+        _mute_row_label->align(LV_ALIGN_LEFT_MID, 78, 0);
+
+        _mute_switch = std::make_unique<Switch>(_mute_row->get());
+        _mute_switch->setSize(80, 44);
+        _mute_switch->align(LV_ALIGN_RIGHT_MID, -32, 0);
+        _mute_switch->setValue(_current_muted);
+        _mute_switch->setBgColor(lv_color_hex(0x3A3A3A), LV_PART_MAIN);
+        _mute_switch->setBgOpa(LV_OPA_COVER, LV_PART_MAIN);
+        _mute_switch->setBorderWidth(0, LV_PART_MAIN);
+        _mute_switch->setRadius(LV_RADIUS_CIRCLE, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(_mute_switch->get(), lv_color_hex(0xFFFFFF), LV_PART_KNOB);
+        lv_obj_set_style_bg_opa(_mute_switch->get(), LV_OPA_COVER, LV_PART_KNOB);
+        lv_obj_set_style_border_width(_mute_switch->get(), 0, LV_PART_KNOB);
+        lv_obj_set_style_radius(_mute_switch->get(), LV_RADIUS_CIRCLE, LV_PART_KNOB);
+        _mute_switch->setBgColor(lv_color_hex(0x53BD65), LV_PART_INDICATOR | LV_STATE_CHECKED);
+        _mute_switch->setBgOpa(LV_OPA_COVER, LV_PART_INDICATOR | LV_STATE_CHECKED);
+        _mute_switch->setBorderWidth(0, LV_PART_INDICATOR | LV_STATE_CHECKED);
+        _mute_switch->onValueChanged().connect([this](bool muted) {
+            _current_muted = muted;
+            updateVolumeUi();
+        });
+    }
+
+    void updateVolumeUi()
+    {
+        if (_value_label) {
+            char buffer[4] = {};
+            std::snprintf(buffer, sizeof(buffer), "%d", _current_volume);
+            _value_label->setText(buffer);
+            _value_label->setTextColor(lv_color_hex(_current_muted ? 0x8E8E93 : 0xFFFFFF));
+        }
+
+        if (_mute_icon_label) {
+            _mute_icon_label->setHidden(!_current_muted);
+        }
+
+        if (_slider) {
+            _slider->setBgColor(lv_color_hex(_current_muted ? 0x5C5C5C : 0x4AD78C), LV_PART_INDICATOR);
+            lv_obj_set_style_bg_color(_slider->get(), lv_color_hex(_current_muted ? 0x8E8E93 : 0xFFFFFF), LV_PART_KNOB);
+        }
+    }
+
+    std::unique_ptr<Container> _panel;
+    std::unique_ptr<Label> _value_label;
+    std::unique_ptr<Label> _mute_icon_label;
+    std::unique_ptr<Slider> _slider;
+    std::unique_ptr<Container> _mute_row;
+    std::unique_ptr<Label> _mute_row_icon;
+    std::unique_ptr<Label> _mute_row_label;
+    std::unique_ptr<Switch> _mute_switch;
+    std::unique_ptr<Button> _ok_button;
+    int _current_volume   = 0;
+    bool _current_muted   = false;
+    bool _save_requested  = false;
+    bool _syncing_slider  = false;
+};
+
 class ButtonWorker::ButtonConfigView {
 public:
     explicit ButtonConfigView(const Hal::ButtonConfig& initialConfig) : _current_config(initialConfig)
@@ -260,18 +443,27 @@ VolumeWorker::VolumeWorker()
     mclog::tagInfo(_tag, "start volume worker");
 
     _applied_volume = GetHAL().getSpeakerVolume();
-    _view           = std::make_unique<PercentageAdjustView>(_applied_volume, 0, 100, 5);
+    _applied_muted  = GetHAL().isSpeakerMuted();
+    _view           = std::make_unique<VolumeAdjustView>(_applied_volume, _applied_muted);
 }
 
 void VolumeWorker::update()
 {
-    if (_view && _applied_volume != _view->currentValue()) {
-        GetHAL().setSpeakerVolume(_view->currentValue(), false);
-        _applied_volume = _view->currentValue();
+    if (_view && (_applied_volume != _view->currentVolume() || _applied_muted != _view->currentMuted())) {
+        if (_applied_volume != _view->currentVolume()) {
+            GetHAL().setSpeakerVolume(_view->currentVolume(), false);
+            _applied_volume = _view->currentVolume();
+        }
+
+        if (_applied_muted != _view->currentMuted()) {
+            GetHAL().setSpeakerMuted(_view->currentMuted(), false);
+            _applied_muted = _view->currentMuted();
+        }
     }
 
     if (_view && _view->consumeSaveRequested()) {
-        GetHAL().setSpeakerVolume(_view->currentValue(), true);
+        GetHAL().setSpeakerVolume(_view->currentVolume(), true);
+        GetHAL().setSpeakerMuted(_view->currentMuted(), true);
         _is_done = true;
     }
 }

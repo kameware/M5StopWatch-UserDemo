@@ -63,8 +63,11 @@ public:
     void update() override;
 
 private:
-    std::unique_ptr<PercentageAdjustView> _view;
+    class VolumeAdjustView;
+
+    std::unique_ptr<VolumeAdjustView> _view;
     int _applied_volume  = 0;
+    bool _applied_muted  = false;
     bool _save_requested = false;
 };
 
@@ -117,6 +120,23 @@ private:
 
     std::unique_ptr<DateAdjustView> _view;
     DateYmd _applied_date;
+};
+
+/**
+ * @brief
+ *
+ */
+class SyncTimeWorker : public WorkerBase {
+public:
+    SyncTimeWorker();
+    ~SyncTimeWorker();
+    void update() override;
+
+private:
+    class SyncTimeView;
+
+    std::unique_ptr<SyncTimeView> _view;
+    bool _result_handled = false;
 };
 
 /**

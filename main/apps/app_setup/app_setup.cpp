@@ -60,15 +60,10 @@ void AppSetup::onOpen()
         {
             "Time & Date",
             {
-                {"Set Time",
+                {"Sync Time",
                  [&]() {
                      _destroy_menu = true;
-                     _worker       = std::make_unique<SetTimeWorker>();
-                 }},
-                {"Set Date",
-                 [&]() {
-                     _destroy_menu = true;
-                     _worker       = std::make_unique<SetDateWorker>();
+                     _worker       = std::make_unique<SyncTimeWorker>();
                  }},
             },
         },

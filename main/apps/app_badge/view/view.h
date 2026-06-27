@@ -42,6 +42,10 @@ public:
     {
         return _image ? _image->get() : nullptr;
     }
+    lv_obj_t* gifObject() const
+    {
+        return nullptr;
+    }
 
 private:
     void showEditDialog();

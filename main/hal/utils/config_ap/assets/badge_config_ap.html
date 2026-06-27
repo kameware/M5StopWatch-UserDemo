@@ -226,6 +226,44 @@
       margin-top: 8px;
     }
 
+    input[type="number"],
+    select {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: white;
+      color: var(--text);
+      font: inherit;
+    }
+
+    .video-controls {
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: white;
+    }
+
+    .video-controls.hidden {
+      display: none;
+    }
+
+    .control-pair {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: minmax(0, 1fr) 92px;
+      align-items: end;
+    }
+
+    .control-row {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .actions {
       display: grid;
       gap: 10px;
@@ -338,6 +376,11 @@
       .color-row {
         grid-template-columns: 1fr;
       }
+
+      .control-pair,
+      .control-row {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -369,7 +412,7 @@
           </div>
 
           <div class="controls">
-            <input id="file" class="file" type="file" accept="image/jpeg,image/jpg" />
+            <input id="file" class="file" type="file" accept="image/*,video/*" />
             <label>
               Zoom
               <input id="zoomRange" type="range" min="1" max="4" step="0.01" value="1" />
@@ -377,6 +420,33 @@
             <div class="color-row">
               <label for="bgColor">Background</label>
               <input id="bgColor" class="color-input" type="color" value="#edf3ff" />
+            </div>
+            <div id="videoControls" class="video-controls hidden">
+              <label>
+                Start
+                <div class="control-pair">
+                  <input id="gifStartRange" type="range" min="0" max="0" step="0.1" value="0" />
+                  <input id="gifStartValue" type="number" min="0" max="0" step="0.1" value="0" />
+                </div>
+              </label>
+              <label>
+                Length
+                <div class="control-pair">
+                  <input id="gifDurationRange" type="range" min="0.2" max="1.5" step="0.1" value="1.5" />
+                  <input id="gifDurationValue" type="number" min="0.2" max="1.5" step="0.1" value="1.5" />
+                </div>
+              </label>
+              <div class="control-row">
+                <label>
+                  FPS
+                  <select id="gifFps">
+                    <option value="5">5 fps</option>
+                    <option value="8" selected>8 fps</option>
+                    <option value="10">10 fps</option>
+                    <option value="12">12 fps</option>
+                  </select>
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -395,7 +465,14 @@
   </main>
 
   <script>
+    const BADGE_IMAGE_SIZE = 466;
     const DEFAULT_JPEG_QUALITY = 0.84;
+    const DEFAULT_ANIMATION_JPEG_QUALITY = 0.72;
+    const MAX_UPLOAD_SIZE_BYTES = 2 * 1024 * 1024;
+    const ANIMATION_OUTPUT_SIZE = 466;
+    const DEFAULT_GIF_DURATION_SECONDS = 1.5;
+    const MAX_GIF_DURATION_SECONDS = 3;
+    const MAX_GIF_FRAME_COUNT = 24;
 
     const fileInput = document.getElementById('file');
     const uploadButton = document.getElementById('upload');
@@ -409,10 +486,22 @@
     const cropFrame = document.getElementById('cropFrame');
     const zoomRange = document.getElementById('zoomRange');
     const bgColorInput = document.getElementById('bgColor');
+    const videoControls = document.getElementById('videoControls');
+    const gifStartRange = document.getElementById('gifStartRange');
+    const gifStartValue = document.getElementById('gifStartValue');
+    const gifDurationRange = document.getElementById('gifDurationRange');
+    const gifDurationValue = document.getElementById('gifDurationValue');
+    const gifFpsSelect = document.getElementById('gifFps');
     const context = previewCanvas.getContext('2d');
 
     const editorState = {
       image: null,
+      sourceFile: null,
+      sourceType: null,
+      video: null,
+      videoUrl: null,
+      gifUrl: null,
+      videoDuration: 0,
       scale: 1,
       baseScale: 1,
       offsetX: 0,
@@ -426,6 +515,8 @@
       selectedSlot: 0,
     };
 
+    let previewRequestId = 0;
+
     function clamp(value, min, max) {
       return Math.min(max, Math.max(min, value));
     }
@@ -433,6 +524,212 @@
     function setStatus(message, isError = false) {
       statusNode.textContent = message;
       statusNode.className = isError ? 'error' : '';
+    }
+
+    function isImageFile(file) {
+      const type = (file.type || '').toLowerCase();
+      if (type.startsWith('image/')) {
+        return true;
+      }
+      return /\.(jpe?g|png|gif|webp|heic|heif|bmp)$/i.test(file.name || '');
+    }
+
+    function isVideoFile(file) {
+      const type = (file.type || '').toLowerCase();
+      if (type.startsWith('video/')) {
+        return true;
+      }
+      return /\.(mp4|m4v|mov|webm|3gp|3gpp)$/i.test(file.name || '');
+    }
+
+    function isGifFile(file) {
+      const type = (file.type || '').toLowerCase();
+      return type === 'image/gif' || /\.gif$/i.test(file.name || '');
+    }
+
+    function isSupportedMediaFile(file) {
+      return isImageFile(file) || isVideoFile(file);
+    }
+
+    function imageWidth(image) {
+      return image.naturalWidth || image.videoWidth || image.width;
+    }
+
+    function imageHeight(image) {
+      return image.naturalHeight || image.videoHeight || image.height;
+    }
+
+    async function decodeWithImageBitmap(file) {
+      if (!('createImageBitmap' in window)) {
+        throw new Error('createImageBitmap unavailable');
+      }
+
+      try {
+        return await createImageBitmap(file, { imageOrientation: 'from-image' });
+      } catch (error) {
+        return await createImageBitmap(file);
+      }
+    }
+
+    function decodeWithImageElement(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = () => {
+          URL.revokeObjectURL(url);
+          resolve(image);
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error('decode failed'));
+        };
+        image.src = url;
+      });
+    }
+
+    function loadAnimatedGifImage(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = () => {
+          image.dataset.objectUrl = url;
+          resolve(image);
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error('decode failed'));
+        };
+        image.src = url;
+      });
+    }
+
+    async function decodeImageFile(file) {
+      try {
+        return await decodeWithImageBitmap(file);
+      } catch (error) {
+        return await decodeWithImageElement(file);
+      }
+    }
+
+    function loadVideoElement(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const video = document.createElement('video');
+        let completed = false;
+
+        const cleanup = () => {
+          clearTimeout(timeout);
+          URL.revokeObjectURL(url);
+        };
+
+        const fail = (error) => {
+          if (completed) {
+            return;
+          }
+          completed = true;
+          cleanup();
+          reject(error);
+        };
+
+        const ready = () => {
+          if (completed) {
+            return;
+          }
+          if (!video.videoWidth || !video.videoHeight) {
+            fail(new Error('video metadata unavailable'));
+            return;
+          }
+          completed = true;
+          clearTimeout(timeout);
+          video.dataset.objectUrl = url;
+          resolve(video);
+        };
+
+        const timeout = setTimeout(() => fail(new Error('video decode timeout')), 15000);
+
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = 'auto';
+        video.addEventListener('loadedmetadata', ready, { once: true });
+        video.addEventListener('error', () => fail(new Error('video decode failed')));
+        video.src = url;
+        video.load();
+      });
+    }
+
+    function seekVideo(video, time) {
+      return new Promise((resolve, reject) => {
+        if (!video) {
+          reject(new Error('video unavailable'));
+          return;
+        }
+
+        const duration = Number.isFinite(video.duration) ? video.duration : 0;
+        const safeTime = duration > 0 ? clamp(time, 0, Math.max(0, duration - 0.05)) : 0;
+        if (Math.abs(video.currentTime - safeTime) < 0.04 && video.readyState >= 2) {
+          resolve();
+          return;
+        }
+
+        const cleanup = () => {
+          clearTimeout(timeout);
+          video.removeEventListener('seeked', done);
+          video.removeEventListener('loadeddata', done);
+          video.removeEventListener('error', fail);
+        };
+        const done = () => {
+          if (video.readyState < 2) {
+            return;
+          }
+          cleanup();
+          resolve();
+        };
+        const fail = () => {
+          cleanup();
+          reject(new Error('video seek failed'));
+        };
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('video seek timeout'));
+        }, 8000);
+
+        video.addEventListener('seeked', done);
+        video.addEventListener('loadeddata', done);
+        video.addEventListener('error', fail);
+        try {
+          video.currentTime = safeTime;
+        } catch (error) {
+          cleanup();
+          reject(error);
+        }
+      });
+    }
+
+    async function captureVideoFrame(video, time) {
+      await seekVideo(video, time);
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const canvasContext = canvas.getContext('2d');
+      if (!canvasContext) {
+        throw new Error('canvas unavailable');
+      }
+      canvasContext.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas;
+    }
+
+    function drawBadgeFrame(targetContext, source, outputSize = BADGE_IMAGE_SIZE) {
+      const ratio = outputSize / BADGE_IMAGE_SIZE;
+      targetContext.clearRect(0, 0, outputSize, outputSize);
+      targetContext.fillStyle = bgColorInput.value || '#edf3ff';
+      targetContext.fillRect(0, 0, outputSize, outputSize);
+      targetContext.drawImage(
+        source,
+        editorState.offsetX * ratio,
+        editorState.offsetY * ratio,
+        imageWidth(source) * editorState.scale * ratio,
+        imageHeight(source) * editorState.scale * ratio
+      );
     }
 
     function selectedSlotState() {
@@ -449,6 +746,122 @@
       deleteSlotButton.disabled = !canUseImage;
     }
 
+    function setVideoControlsVisible(show) {
+      videoControls.classList.toggle('hidden', !show);
+    }
+
+    function resetSelectedMedia() {
+      previewRequestId += 1;
+      if (editorState.image && typeof editorState.image.close === 'function') {
+        editorState.image.close();
+      }
+      if (editorState.video) {
+        editorState.video.pause();
+        editorState.video.removeAttribute('src');
+        editorState.video.load();
+      }
+      if (editorState.videoUrl) {
+        URL.revokeObjectURL(editorState.videoUrl);
+      }
+      if (editorState.gifUrl) {
+        URL.revokeObjectURL(editorState.gifUrl);
+      }
+
+      editorState.image = null;
+      editorState.sourceFile = null;
+      editorState.sourceType = null;
+      editorState.video = null;
+      editorState.videoUrl = null;
+      editorState.gifUrl = null;
+      editorState.videoDuration = 0;
+      setVideoControlsVisible(false);
+    }
+
+    function setNumberAndRange(range, input, value, min, max) {
+      range.min = String(min);
+      range.max = String(max);
+      input.min = String(min);
+      input.max = String(max);
+      range.value = String(value);
+      input.value = String(value);
+    }
+
+    function getGifStart() {
+      return Number(gifStartValue.value) || 0;
+    }
+
+    function getGifDuration() {
+      return Number(gifDurationValue.value) || 0.2;
+    }
+
+    function getSelectedGifFps() {
+      return Number(gifFpsSelect.value) || 8;
+    }
+
+    function getMaxGifDurationForCurrentFps() {
+      return Math.max(0.2, MAX_GIF_FRAME_COUNT / getSelectedGifFps());
+    }
+
+    function clampGifControls(changedControl) {
+      const videoDuration = editorState.videoDuration || 0;
+      const maxDuration = Math.max(
+        0.2,
+        Math.min(MAX_GIF_DURATION_SECONDS, getMaxGifDurationForCurrentFps(), videoDuration || DEFAULT_GIF_DURATION_SECONDS)
+      );
+      let start = clamp(Number(gifStartValue.value) || 0, 0, Math.max(0, videoDuration - 0.1));
+      let duration = clamp(Number(gifDurationValue.value) || DEFAULT_GIF_DURATION_SECONDS, 0.2, maxDuration);
+
+      if (videoDuration > 0 && start + duration > videoDuration) {
+        if (changedControl === 'start') {
+          duration = Math.max(0.2, videoDuration - start);
+        } else {
+          start = Math.max(0, videoDuration - duration);
+        }
+      }
+
+      const roundedStart = Math.round(start * 10) / 10;
+      const roundedDuration = Math.round(duration * 10) / 10;
+      gifDurationRange.max = String(Math.round(maxDuration * 10) / 10);
+      gifDurationValue.max = String(Math.round(maxDuration * 10) / 10);
+      gifStartRange.value = String(roundedStart);
+      gifStartValue.value = String(roundedStart);
+      gifDurationRange.value = String(roundedDuration);
+      gifDurationValue.value = String(roundedDuration);
+    }
+
+    function configureVideoControls() {
+      const videoDuration = editorState.videoDuration || 0;
+      const durationMax = Math.max(
+        0.2,
+        Math.min(MAX_GIF_DURATION_SECONDS, getMaxGifDurationForCurrentFps(), videoDuration || DEFAULT_GIF_DURATION_SECONDS)
+      );
+      const durationValue = Math.min(DEFAULT_GIF_DURATION_SECONDS, durationMax);
+      const startMax = Math.max(0, videoDuration - 0.1);
+
+      setNumberAndRange(gifStartRange, gifStartValue, 0, 0, Math.round(startMax * 10) / 10);
+      setNumberAndRange(gifDurationRange, gifDurationValue, Math.round(durationValue * 10) / 10, 0.2, Math.round(durationMax * 10) / 10);
+      setVideoControlsVisible(true);
+      clampGifControls('duration');
+    }
+
+    async function updateVideoPreviewFromControls() {
+      if (!editorState.video) {
+        return;
+      }
+
+      const requestId = ++previewRequestId;
+      try {
+        const frame = await captureVideoFrame(editorState.video, getGifStart());
+        if (requestId !== previewRequestId) {
+          return;
+        }
+        editorState.image = frame;
+        drawPreview();
+      } catch (error) {
+        setStatus(error.message || 'Failed to update video preview.', true);
+      }
+    }
+
     function setBusy(isBusy) {
       uploadButton.disabled = isBusy;
       refreshButton.disabled = isBusy;
@@ -458,21 +871,28 @@
       fileInput.disabled = isBusy;
       zoomRange.disabled = isBusy;
       bgColorInput.disabled = isBusy;
+      gifStartRange.disabled = isBusy;
+      gifStartValue.disabled = isBusy;
+      gifDurationRange.disabled = isBusy;
+      gifDurationValue.disabled = isBusy;
+      gifFpsSelect.disabled = isBusy;
       if (!isBusy) {
         updateSelectionUi();
       }
     }
 
     function fitImageToCanvas(image) {
-      const baseScale = Math.max(466 / image.width, 466 / image.height);
+      const width = imageWidth(image);
+      const height = imageHeight(image);
+      const baseScale = Math.max(BADGE_IMAGE_SIZE / width, BADGE_IMAGE_SIZE / height);
       const minScale = Math.max(baseScale * 0.35, 0.1);
       editorState.baseScale = baseScale;
       editorState.scale = baseScale;
       zoomRange.min = String(minScale);
       zoomRange.max = String(baseScale * 4);
       zoomRange.value = String(baseScale);
-      editorState.offsetX = (466 - image.width * baseScale) / 2;
-      editorState.offsetY = (466 - image.height * baseScale) / 2;
+      editorState.offsetX = (BADGE_IMAGE_SIZE - width * baseScale) / 2;
+      editorState.offsetY = (BADGE_IMAGE_SIZE - height * baseScale) / 2;
     }
 
     function constrainOffsets() {
@@ -480,27 +900,27 @@
         return;
       }
 
-      const scaledWidth = editorState.image.width * editorState.scale;
-      const scaledHeight = editorState.image.height * editorState.scale;
-      const minOffsetX = Math.min(0, 466 - scaledWidth);
-      const minOffsetY = Math.min(0, 466 - scaledHeight);
-      const maxOffsetX = Math.max(0, 466 - scaledWidth);
-      const maxOffsetY = Math.max(0, 466 - scaledHeight);
+      const scaledWidth = imageWidth(editorState.image) * editorState.scale;
+      const scaledHeight = imageHeight(editorState.image) * editorState.scale;
+      const minOffsetX = Math.min(0, BADGE_IMAGE_SIZE - scaledWidth);
+      const minOffsetY = Math.min(0, BADGE_IMAGE_SIZE - scaledHeight);
+      const maxOffsetX = Math.max(0, BADGE_IMAGE_SIZE - scaledWidth);
+      const maxOffsetY = Math.max(0, BADGE_IMAGE_SIZE - scaledHeight);
 
       editorState.offsetX = clamp(editorState.offsetX, minOffsetX, maxOffsetX);
       editorState.offsetY = clamp(editorState.offsetY, minOffsetY, maxOffsetY);
     }
 
     function drawPreview() {
-      context.clearRect(0, 0, 466, 466);
+      context.clearRect(0, 0, BADGE_IMAGE_SIZE, BADGE_IMAGE_SIZE);
       context.fillStyle = bgColorInput.value || '#edf3ff';
-      context.fillRect(0, 0, 466, 466);
+      context.fillRect(0, 0, BADGE_IMAGE_SIZE, BADGE_IMAGE_SIZE);
 
       if (!editorState.image) {
         context.fillStyle = '#5d6b85';
         context.font = '18px sans-serif';
         context.textAlign = 'center';
-        context.fillText('Select an image', 233, 220);
+        context.fillText('Select image/video', 233, 220);
         return;
       }
 
@@ -509,15 +929,46 @@
         editorState.image,
         editorState.offsetX,
         editorState.offsetY,
-        editorState.image.width * editorState.scale,
-        editorState.image.height * editorState.scale
+        imageWidth(editorState.image) * editorState.scale,
+        imageHeight(editorState.image) * editorState.scale
       );
     }
 
-    async function loadSelectedImage(file) {
-      const bitmap = await createImageBitmap(file);
-      editorState.image = bitmap;
-      fitImageToCanvas(bitmap);
+    async function loadSelectedMedia(file) {
+      resetSelectedMedia();
+      editorState.sourceFile = file;
+
+      if (isVideoFile(file)) {
+        const video = await loadVideoElement(file);
+        editorState.sourceType = 'video';
+        editorState.video = video;
+        editorState.videoUrl = video.dataset.objectUrl || '';
+        editorState.videoDuration = Number.isFinite(video.duration) ? video.duration : 0;
+        configureVideoControls();
+
+        const frame = await captureVideoFrame(video, getGifStart());
+        editorState.image = frame;
+        fitImageToCanvas(frame);
+        drawPreview();
+        return;
+      }
+
+      if (isGifFile(file)) {
+        const media = await loadAnimatedGifImage(file);
+        editorState.sourceType = 'gif';
+        editorState.gifUrl = media.dataset.objectUrl || '';
+        editorState.videoDuration = 0;
+        configureVideoControls();
+        editorState.image = media;
+        fitImageToCanvas(media);
+        drawPreview();
+        return;
+      }
+
+      const media = await decodeImageFile(file);
+      editorState.sourceType = 'image';
+      editorState.image = media;
+      fitImageToCanvas(media);
       drawPreview();
     }
 
@@ -594,15 +1045,118 @@
       }
     }
 
-    async function renderUploadBlob() {
-      return new Promise((resolve) => {
-        previewCanvas.toBlob((blob) => resolve(blob), 'image/jpeg', DEFAULT_JPEG_QUALITY);
+    function wait(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function canvasToJpegBlob(canvas, quality) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('Failed to convert image.'));
+            return;
+          }
+          resolve(blob);
+        }, 'image/jpeg', quality);
       });
+    }
+
+    async function renderUploadBlob() {
+      return canvasToJpegBlob(previewCanvas, DEFAULT_JPEG_QUALITY);
+    }
+
+    async function captureAnimationFrameBlob(source, canvas, context) {
+      drawBadgeFrame(context, source, ANIMATION_OUTPUT_SIZE);
+      return canvasToJpegBlob(canvas, DEFAULT_ANIMATION_JPEG_QUALITY);
+    }
+
+    async function renderAnimationPack(onProgress) {
+      const fps = getSelectedGifFps();
+      const start = editorState.sourceType === 'video' ? getGifStart() : 0;
+      const duration = getGifDuration();
+      const frameCount = clamp(Math.ceil(duration * fps), 1, MAX_GIF_FRAME_COUNT);
+      const frameDelayMs = Math.max(40, Math.round(1000 / fps));
+      const frameCanvas = document.createElement('canvas');
+      frameCanvas.width = ANIMATION_OUTPUT_SIZE;
+      frameCanvas.height = ANIMATION_OUTPUT_SIZE;
+      const frameContext = frameCanvas.getContext('2d');
+      const frameBytes = [];
+      let gifCaptureImage = null;
+
+      try {
+        if (editorState.sourceType === 'gif') {
+          gifCaptureImage = await loadAnimatedGifImage(editorState.sourceFile);
+        }
+
+        for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+          if (editorState.sourceType === 'video') {
+            const time = start + frameIndex / fps;
+            await seekVideo(editorState.video, time);
+            const blob = await captureAnimationFrameBlob(editorState.video, frameCanvas, frameContext);
+            frameBytes.push(new Uint8Array(await blob.arrayBuffer()));
+          } else if (editorState.sourceType === 'gif') {
+            if (frameIndex > 0) {
+              await wait(frameDelayMs);
+            }
+            const blob = await captureAnimationFrameBlob(gifCaptureImage, frameCanvas, frameContext);
+            frameBytes.push(new Uint8Array(await blob.arrayBuffer()));
+          } else {
+            throw new Error('Please select a video or GIF.');
+          }
+
+          if (onProgress) {
+            onProgress(frameIndex + 1, frameCount);
+          }
+        }
+      } finally {
+        if (gifCaptureImage && gifCaptureImage.dataset.objectUrl) {
+          URL.revokeObjectURL(gifCaptureImage.dataset.objectUrl);
+        }
+      }
+
+      const totalSize = 14 + frameBytes.reduce((sum, bytes) => sum + 4 + bytes.length, 0);
+      const buffer = new ArrayBuffer(totalSize);
+      const output = new Uint8Array(buffer);
+      const view = new DataView(buffer);
+      const magic = 'BANIM1';
+      for (let index = 0; index < magic.length; index += 1) {
+        output[index] = magic.charCodeAt(index);
+      }
+      view.setUint16(6, ANIMATION_OUTPUT_SIZE, true);
+      view.setUint16(8, ANIMATION_OUTPUT_SIZE, true);
+      view.setUint16(10, frameBytes.length, true);
+      view.setUint16(12, frameDelayMs, true);
+
+      let offset = 14;
+      for (const bytes of frameBytes) {
+        view.setUint32(offset, bytes.length, true);
+        offset += 4;
+        output.set(bytes, offset);
+        offset += bytes.length;
+      }
+
+      return new Blob([buffer], { type: 'application/x-m5-badge-animation' });
+    }
+
+    async function buildUploadPayload(onProgress) {
+      if (editorState.sourceType === 'video' || editorState.sourceType === 'gif') {
+        return {
+          blob: await renderAnimationPack(onProgress),
+          contentType: 'application/x-m5-badge-animation',
+          fileName: `slot-${editorState.selectedSlot + 1}.banim`,
+        };
+      }
+
+      return {
+        blob: await renderUploadBlob(),
+        contentType: 'image/jpeg',
+        fileName: `slot-${editorState.selectedSlot + 1}.jpg`,
+      };
     }
 
     async function upload() {
       if (!editorState.image) {
-        setStatus('Please select an image.', true);
+        setStatus('Please select an image or video.', true);
         return;
       }
 
@@ -611,12 +1165,19 @@
       setStatus(`Uploading to slot ${slot + 1}...`);
 
       try {
-        const blob = await renderUploadBlob();
+        const payload = await buildUploadPayload((done, total) => {
+          setStatus(`Converting animation... ${done}/${total}`);
+        });
+        const blob = payload.blob;
+        if (blob.size > MAX_UPLOAD_SIZE_BYTES) {
+          throw new Error('Converted animation is too large. Use a shorter range or lower FPS.');
+        }
+
         const response = await fetch(`/upload?slot=${slot}`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'image/jpeg',
-            'X-File-Name': `slot-${slot + 1}.jpg`,
+            'Content-Type': payload.contentType,
+            'X-File-Name': payload.fileName,
           },
           body: blob,
         });
@@ -651,17 +1212,29 @@
         return;
       }
 
-      if (!/image\/jpeg/.test(file.type) && !/\.jpe?g$/i.test(file.name)) {
-        setStatus('Please select an image.', true);
+      if (!isSupportedMediaFile(file)) {
+        setStatus('Please select an image or video file.', true);
         fileInput.value = '';
         return;
       }
 
+      setBusy(true);
+      setStatus('Loading media...');
       try {
-        await loadSelectedImage(file);
-        setStatus('Image loaded.');
+        await loadSelectedMedia(file);
+        if (editorState.sourceType === 'video') {
+          setStatus('Video loaded. Select the range, then upload it as animation.');
+        } else if (editorState.sourceType === 'gif') {
+          setStatus('GIF loaded. Length and FPS will be captured as animation.');
+        } else {
+          setStatus('Image loaded. It will be converted to JPEG on upload.');
+        }
       } catch (error) {
-        setStatus('Failed to decode the selected image.', true);
+        resetSelectedMedia();
+        drawPreview();
+        setStatus('Failed to decode the selected media.', true);
+      } finally {
+        setBusy(false);
       }
     });
 
@@ -672,8 +1245,8 @@
 
       const previousScale = editorState.scale;
       const nextScale = Number(zoomRange.value);
-      const centerX = 233;
-      const centerY = 233;
+      const centerX = BADGE_IMAGE_SIZE / 2;
+      const centerY = BADGE_IMAGE_SIZE / 2;
       const imageX = (centerX - editorState.offsetX) / previousScale;
       const imageY = (centerY - editorState.offsetY) / previousScale;
       editorState.scale = nextScale;
@@ -684,6 +1257,31 @@
 
     bgColorInput.addEventListener('input', () => {
       drawPreview();
+    });
+
+    function handleGifControlChanged(changedControl) {
+      clampGifControls(changedControl);
+      updateVideoPreviewFromControls();
+    }
+
+    gifStartRange.addEventListener('input', () => {
+      gifStartValue.value = gifStartRange.value;
+      handleGifControlChanged('start');
+    });
+    gifStartValue.addEventListener('input', () => {
+      gifStartRange.value = gifStartValue.value;
+      handleGifControlChanged('start');
+    });
+    gifDurationRange.addEventListener('input', () => {
+      gifDurationValue.value = gifDurationRange.value;
+      handleGifControlChanged('duration');
+    });
+    gifDurationValue.addEventListener('input', () => {
+      gifDurationRange.value = gifDurationValue.value;
+      handleGifControlChanged('duration');
+    });
+    gifFpsSelect.addEventListener('change', () => {
+      handleGifControlChanged('duration');
     });
 
     cropFrame.addEventListener('pointerdown', (event) => {

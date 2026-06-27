@@ -20,9 +20,14 @@ static float get_effective_volume_scale(float volumeScale)
     return std::max(0.0f, volumeScale);
 }
 
+static bool is_audio_silenced()
+{
+    return GetHAL().isSpeakerMuted() || GetHAL().getSpeakerVolume() <= 0;
+}
+
 void play_tone(int frequency, float durationSec, float volumeScale)
 {
-    if (GetHAL().getSpeakerVolume() <= 0) {
+    if (is_audio_silenced()) {
         return;
     }
 
@@ -62,7 +67,7 @@ void play_tone(int frequency, float durationSec, float volumeScale)
 
 void play_melody(const std::vector<int>& midiList, float durationSec, float volumeScale)
 {
-    if (GetHAL().getSpeakerVolume() <= 0) {
+    if (is_audio_silenced()) {
         return;
     }
 
@@ -113,7 +118,7 @@ void play_melody(const std::vector<int>& midiList, float durationSec, float volu
 
 void play_tone_from_midi(int midi, float durationSec, float volumeScale)
 {
-    if (GetHAL().getSpeakerVolume() <= 0) {
+    if (is_audio_silenced()) {
         return;
     }
 
@@ -124,7 +129,7 @@ void play_tone_from_midi(int midi, float durationSec, float volumeScale)
 
 void play_random_tone(int semitoneShift, float durationSec, float volumeScale)
 {
-    if (GetHAL().getSpeakerVolume() <= 0) {
+    if (is_audio_silenced()) {
         return;
     }
 

@@ -126,7 +126,7 @@ void Hal::setTimezone(std::string_view tz)
 std::string Hal::getTimezone()
 {
     Settings settings("system", false);
-    return settings.GetString("tz", "GMT0");
+    return settings.GetString("tz", "JST-9");
 }
 
 DateYmd Hal::getDateYmd()

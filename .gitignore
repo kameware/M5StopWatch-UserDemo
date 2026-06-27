@@ -63,3 +63,6 @@ obj/
 
 sdkconfig
 sdkconfig.old
+
+# Local Wi-Fi credentials
+main/private_wifi_config.h

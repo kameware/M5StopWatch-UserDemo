@@ -4,8 +4,12 @@
  * SPDX-License-Identifier: MIT
  */
 #include "workers.h"
+#include "wifi_time_sync.h"
 #include <assets/assets.h>
 #include <mooncake_log.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <atomic>
 #include <cstdio>
 
 using namespace smooth_ui_toolkit::lvgl_cpp;
@@ -16,6 +20,39 @@ static const std::string_view _tag = "Setup-DateTime";
 namespace setup_workers {
 
 namespace {
+
+std::atomic<bool> _time_sync_running{false};
+std::atomic<bool> _time_sync_result_ready{false};
+std::atomic<bool> _time_sync_succeeded{false};
+
+void time_sync_task(void*)
+{
+    const bool succeeded = sync_time_from_wifi();
+    _time_sync_succeeded.store(succeeded);
+    _time_sync_result_ready.store(true);
+    _time_sync_running.store(false);
+    vTaskDelete(nullptr);
+}
+
+bool start_time_sync_task()
+{
+    bool expected = false;
+    if (!_time_sync_running.compare_exchange_strong(expected, true)) {
+        return true;
+    }
+
+    _time_sync_result_ready.store(false);
+    _time_sync_succeeded.store(false);
+
+    BaseType_t ret = xTaskCreate(time_sync_task, "time_sync", 8192, nullptr, 4, nullptr);
+    if (ret != pdPASS) {
+        _time_sync_running.store(false);
+        _time_sync_result_ready.store(true);
+        return false;
+    }
+
+    return true;
+}
 
 std::string build_number_options(int begin, int end, int width = 2)
 {
@@ -333,6 +370,108 @@ private:
     bool _save_requested = false;
 };
 
+class SyncTimeWorker::SyncTimeView {
+public:
+    SyncTimeView()
+    {
+        _panel = std::make_unique<Container>(lv_screen_active());
+        _panel->align(LV_ALIGN_CENTER, 0, 0);
+        _panel->setSize(466, 466);
+        _panel->setRadius(0);
+        _panel->setBorderWidth(0);
+        _panel->setPaddingAll(0);
+        _panel->setBgColor(lv_color_hex(0x000000));
+        _panel->setBgOpa(LV_OPA_COVER);
+        _panel->removeFlag(LV_OBJ_FLAG_SCROLLABLE);
+
+        _title_label = std::make_unique<Label>(_panel->get());
+        _title_label->align(LV_ALIGN_TOP_MID, 0, 58);
+        _title_label->setText("Sync Time");
+        _title_label->setTextFont(&MontserratSemiBold26);
+        _title_label->setTextColor(lv_color_hex(0xFFFFFF));
+
+        _status_label = std::make_unique<Label>(_panel->get());
+        _status_label->align(LV_ALIGN_CENTER, 0, -48);
+        _status_label->setWidth(374);
+        _status_label->setTextAlign(LV_TEXT_ALIGN_CENTER);
+        _status_label->setTextFont(&lv_font_montserrat_28);
+        _status_label->setTextColor(lv_color_hex(0xFFFFFF));
+
+        _detail_label = std::make_unique<Label>(_panel->get());
+        _detail_label->align(LV_ALIGN_CENTER, 0, 4);
+        _detail_label->setWidth(374);
+        _detail_label->setTextAlign(LV_TEXT_ALIGN_CENTER);
+        _detail_label->setTextFont(&lv_font_montserrat_18);
+        _detail_label->setTextColor(lv_color_hex(0x9A9A9A));
+
+        _ok_button = std::make_unique<Button>(_panel->get());
+        _ok_button->align(LV_ALIGN_CENTER, 0, 175);
+        _ok_button->setSize(374, 130);
+        _ok_button->setRadius(77);
+        _ok_button->setBorderWidth(0);
+        _ok_button->setShadowWidth(0);
+        _ok_button->label().setTextFont(&lv_font_montserrat_28);
+        _ok_button->label().align(LV_ALIGN_CENTER, 0, 0);
+        _ok_button->onClick().connect([this]() { _close_requested = true; });
+
+        showSyncing();
+    }
+
+    void showSyncing()
+    {
+        _status_label->setText("Syncing...");
+        _status_label->setTextColor(lv_color_hex(0xFFFFFF));
+        _detail_label->setText("jp.pool.ntp.org");
+        _ok_button->setBgColor(lv_color_hex(0x4C4C4C));
+        _ok_button->label().setText("Please Wait");
+        _ok_button->label().setTextColor(lv_color_hex(0xBEBEBE));
+        _ok_button->addState(LV_STATE_DISABLED);
+    }
+
+    void showResult(bool succeeded)
+    {
+        if (succeeded) {
+            _status_label->setText("Synced");
+            _status_label->setTextColor(lv_color_hex(0x4AD78C));
+
+            const auto date = GetHAL().getDateYmd();
+            const auto time = GetHAL().getTimeHms();
+            if (date.isValid() && time.isValid()) {
+                char buffer[32] = {};
+                std::snprintf(buffer, sizeof(buffer), "%04u-%02u-%02u %02u:%02u", date.year, date.month, date.day,
+                              time.hour, time.minute);
+                _detail_label->setText(buffer);
+            } else {
+                _detail_label->setText("RTC updated");
+            }
+        } else {
+            _status_label->setText("Sync Failed");
+            _status_label->setTextColor(lv_color_hex(0xFF6B6B));
+            _detail_label->setText("Check Wi-Fi");
+        }
+
+        _ok_button->setBgColor(lv_color_hex(0x4AD78C));
+        _ok_button->label().setText("OK");
+        _ok_button->label().setTextColor(lv_color_hex(0x0F5831));
+        _ok_button->removeState(LV_STATE_DISABLED);
+    }
+
+    bool consumeCloseRequested()
+    {
+        bool requested   = _close_requested;
+        _close_requested = false;
+        return requested;
+    }
+
+private:
+    std::unique_ptr<Container> _panel;
+    std::unique_ptr<Label> _title_label;
+    std::unique_ptr<Label> _status_label;
+    std::unique_ptr<Label> _detail_label;
+    std::unique_ptr<Button> _ok_button;
+    bool _close_requested = false;
+};
+
 }  // namespace setup_workers
 
 SetTimeWorker::SetTimeWorker()
@@ -372,5 +511,33 @@ void SetDateWorker::update()
 }
 
 SetDateWorker::~SetDateWorker()
+{
+}
+
+SyncTimeWorker::SyncTimeWorker()
+{
+    mclog::tagInfo(_tag, "start sync time worker");
+
+    _view = std::make_unique<SyncTimeView>();
+    if (!start_time_sync_task()) {
+        mclog::tagError(_tag, "failed to start sync time task");
+        _view->showResult(false);
+        _result_handled = true;
+    }
+}
+
+void SyncTimeWorker::update()
+{
+    if (_view && !_result_handled && _time_sync_result_ready.load()) {
+        _view->showResult(_time_sync_succeeded.load());
+        _result_handled = true;
+    }
+
+    if (_view && _result_handled && _view->consumeCloseRequested()) {
+        _is_done = true;
+    }
+}
+
+SyncTimeWorker::~SyncTimeWorker()
 {
 }

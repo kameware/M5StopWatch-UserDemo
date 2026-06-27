@@ -443,8 +443,9 @@ void Hal::audio_init()
 
     ioe_speaker_enable(true);
 
-    // Load volume from settings
+    // Load volume/mute from settings
     setSpeakerVolume(getSpeakerVolume(true), false);
+    setSpeakerMuted(isSpeakerMuted(true), false);
 }
 
 void Hal::setSpeakerVolume(int volume, bool saveToSettings)
@@ -452,8 +453,9 @@ void Hal::setSpeakerVolume(int volume, bool saveToSettings)
     _spk_volume = volume;
     _spk_volume = uitk::clamp(_spk_volume, 0, 100);
 
-    mclog::tagInfo(_tag, "set speaker volume to {}", _spk_volume);
-    _audio_codec.setVolume(_spk_volume);
+    int output_volume = _spk_muted ? 0 : _spk_volume;
+    mclog::tagInfo(_tag, "set speaker volume to {}, output {}", _spk_volume, output_volume);
+    _audio_codec.setVolume(output_volume);
 
     if (saveToSettings) {
         Settings settings(std::string(Hal::SettingsNs), true);
@@ -464,8 +466,6 @@ void Hal::setSpeakerVolume(int volume, bool saveToSettings)
 
 int Hal::getSpeakerVolume(bool loadFromSettings)
 {
-    _spk_volume = _audio_codec.getVolume();
-
     if (loadFromSettings) {
         Settings settings(std::string(Hal::SettingsNs), false);
         _spk_volume = settings.GetInt("spk_vol", 80);
@@ -476,6 +476,32 @@ int Hal::getSpeakerVolume(bool loadFromSettings)
     return _spk_volume;
 }
 
+void Hal::setSpeakerMuted(bool muted, bool saveToSettings)
+{
+    _spk_muted       = muted;
+    int output_volume = _spk_muted ? 0 : _spk_volume;
+
+    mclog::tagInfo(_tag, "set speaker muted to {}, output {}", _spk_muted, output_volume);
+    _audio_codec.setVolume(output_volume);
+
+    if (saveToSettings) {
+        Settings settings(std::string(Hal::SettingsNs), true);
+        settings.SetBool("spk_mute", _spk_muted);
+        mclog::tagInfo(_tag, "mute saved to settings: {}", _spk_muted);
+    }
+}
+
+bool Hal::isSpeakerMuted(bool loadFromSettings)
+{
+    if (loadFromSettings) {
+        Settings settings(std::string(Hal::SettingsNs), false);
+        _spk_muted = settings.GetBool("spk_mute", false);
+        mclog::tagInfo(_tag, "mute loaded from settings: {}", _spk_muted);
+    }
+
+    return _spk_muted;
+}
+
 void Hal::audioRecord(std::vector<int16_t>& data, uint16_t durationMs, float gain)
 {
     _audio_codec.record(data, durationMs, gain);
@@ -483,6 +509,10 @@ void Hal::audioRecord(std::vector<int16_t>& data, uint16_t durationMs, float gai
 
 void Hal::audioPlay(std::vector<int16_t>& data, bool async)
 {
+    if (!data.empty() && (_spk_muted || _spk_volume <= 0)) {
+        return;
+    }
+
     _audio_codec.play(data, async);
 }
 
@@ -505,6 +535,10 @@ extern const uint8_t _boot_sfx_end[] asm("_binary_boot_sfx_bin_end");
 
 void Hal::playBootSfx()
 {
+    if (_spk_muted || _spk_volume <= 0) {
+        return;
+    }
+
     mclog::tagInfo(_tag, "play boot sfx");
 
     const std::size_t byte_count = _boot_sfx_end - _boot_sfx_start;

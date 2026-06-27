@@ -29,9 +29,12 @@ public:
 
 protected:
     std::array<std::unique_ptr<uitk::lvgl_cpp::Label>, 5> labels;
+    std::unique_ptr<uitk::lvgl_cpp::Label> mute_icon;
     uint32_t update_time_count = 0;
+    bool last_muted            = false;
 
     void set_clock_to(const std::string_view text);
+    void update_mute_icon(bool force = false);
 };
 
 }  // namespace view

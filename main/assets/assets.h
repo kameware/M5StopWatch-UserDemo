@@ -23,6 +23,7 @@ LV_IMG_DECLARE(icon_stopwatch);
 LV_IMG_DECLARE(icon_badge);
 LV_IMG_DECLARE(icon_lucky_wheel);
 LV_IMG_DECLARE(icon_watch_face);
+LV_IMG_DECLARE(icon_guruguru);
 
 LV_IMG_DECLARE(classic_hour_hand);
 LV_IMG_DECLARE(classic_minute_hand);
@@ -43,3 +44,13 @@ LV_IMG_DECLARE(big_number_6);
 LV_IMG_DECLARE(big_number_7);
 LV_IMG_DECLARE(big_number_8);
 LV_IMG_DECLARE(big_number_9);
+
+LV_IMG_DECLARE(guruguru_avatar_dir0);
+LV_IMG_DECLARE(guruguru_avatar_dir1);
+LV_IMG_DECLARE(guruguru_avatar_dir2);
+LV_IMG_DECLARE(guruguru_avatar_dir3);
+LV_IMG_DECLARE(guruguru_avatar_dir4);
+LV_IMG_DECLARE(guruguru_avatar_dir5);
+LV_IMG_DECLARE(guruguru_avatar_dir6);
+LV_IMG_DECLARE(guruguru_avatar_dir7);
+LV_IMG_DECLARE(guruguru_avatar_dir8);
