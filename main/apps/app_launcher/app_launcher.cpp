@@ -12,6 +12,12 @@
 
 using namespace mooncake;
 
+namespace {
+
+constexpr uint32_t kLauncherUpdateIntervalMs = 16;
+
+}  // namespace
+
 void AppLauncher::onLauncherCreate()
 {
     mclog::tagInfo(getAppInfo().name, "on create");
@@ -41,17 +47,22 @@ void AppLauncher::onLauncherOpen()
         GetHAL().playBootSfx();
     }
 
-    _last_charge_check_tick = GetHAL().millis();
-    _was_battery_charging   = GetHAL().isBatteryCharging();
+    _last_charge_check_tick    = GetHAL().millis();
+    _last_launcher_update_tick = 0;
+    _was_battery_charging      = GetHAL().isBatteryCharging();
 
     _is_first_open = false;
 }
 
 void AppLauncher::onLauncherRunning()
 {
-    LvglLockGuard lock;
-
     uint32_t now = GetHAL().millis();
+    if (now - _last_launcher_update_tick < kLauncherUpdateIntervalMs) {
+        return;
+    }
+    _last_launcher_update_tick = now;
+
+    LvglLockGuard lock;
 
     // Check pending status bar creation
     if (_pending_status_bar_create && !view::is_status_bar_created() && now >= _status_bar_create_tick) {
@@ -85,6 +96,7 @@ void AppLauncher::onLauncherClose()
     _pending_status_bar_create = false;
     _status_bar_create_tick    = 0;
     _last_charge_check_tick    = 0;
+    _last_launcher_update_tick = 0;
     _was_battery_charging      = false;
     _view.reset();
     view::destroy_status_bar();

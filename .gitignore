@@ -50,6 +50,19 @@ managed_components/
 # Python virtual environment
 .venv/
 
+# Local secrets / credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+credentials.*
+secrets.*
+*.secret
+
 # Debug / Release files
 Debug/
 debug/
@@ -66,3 +79,5 @@ sdkconfig.old
 
 # Local Wi-Fi credentials
 main/private_wifi_config.h
+main/private_*.h
+main/*_private*.h

@@ -45,6 +45,9 @@ private:
 
     int _clicked_app_id = -1;
     State_t _state      = STATE_STARTUP;
+    int _app_count             = 0;
+    int _last_scroll_x         = 0;
+    bool _has_scroll_snapshot = false;
 
     void scroll_to_nearby_icon(int direction);
     void handle_state_startup();

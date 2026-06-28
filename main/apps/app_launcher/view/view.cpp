@@ -56,9 +56,10 @@ public:
 
     void jumpTo(int index)
     {
-        if (index < 0 || index >= _page_num) {
+        if (_page_num <= 0) {
             return;
         }
+        index = normalize_index(index);
         _current_index = index;
         _last_index    = index;
         update_dots();
@@ -91,6 +92,15 @@ private:
 
     std::unique_ptr<Container> _panel;
     std::vector<std::unique_ptr<Container>> _dots;
+
+    int normalize_index(int index) const
+    {
+        index %= _page_num;
+        if (index < 0) {
+            index += _page_num;
+        }
+        return index;
+    }
 
     void update_dots()
     {
@@ -133,9 +143,10 @@ public:
 
     void jumpTo(int index)
     {
-        if (index < 0 || index >= _icon_label_texts.size()) {
+        if (_icon_label_texts.empty()) {
             return;
         }
+        index = normalize_index(index);
 
         _current_index = index;
         _last_index    = index;
@@ -143,24 +154,23 @@ public:
         // Update label
         _label->setText(_icon_label_texts[index]);
         _label->setPos(0, pos_y);
+        set_opacity(255);
     }
 
     void update(int scrollValue)
     {
+        if (_icon_label_texts.empty()) {
+            return;
+        }
+
         _last_index = _current_index;
 
         // Calculate current icon index and distance to icon center
-        _current_index        = (scrollValue + _icon_gap / 2) / _icon_gap;
-        int icon_center_pos_x = _current_index * _icon_gap;
+        int absolute_index    = (scrollValue + _icon_gap / 2) / _icon_gap;
+        int icon_center_pos_x = absolute_index * _icon_gap;
         int distance_to_icon  = std::abs(scrollValue - icon_center_pos_x);
 
-        // Clamp index
-        if (_current_index < 0) {
-            _current_index = 0;
-        }
-        if (_current_index >= _icon_label_texts.size()) {
-            _current_index = _icon_label_texts.size() - 1;
-        }
+        _current_index = normalize_index(absolute_index);
 
         // Check if label should be visible
         bool should_be_visible = (distance_to_icon <= show_range);
@@ -173,10 +183,12 @@ public:
         // Update opacity based on distance when in transition zone
         if (should_be_visible && distance_to_icon > (show_range - transition_zone)) {
             // Fade out as approaching edge
-            float fade_ratio = 1.0f - (float)(distance_to_icon - (show_range - transition_zone)) / transition_zone;
-            _label->setOpa(255 * fade_ratio);
+            int fade_opa = 255 - ((distance_to_icon - (show_range - transition_zone)) * 255 / transition_zone);
+            set_opacity(static_cast<uint8_t>(uitk::clamp(fade_opa, 0, 255)));
         } else if (should_be_visible) {
-            _label->setOpa(255);
+            set_opacity(255);
+        } else {
+            set_opacity(0);
         }
     }
 
@@ -185,16 +197,35 @@ private:
     int _icon_gap      = 0;
     int _current_index = 0;
     int _last_index    = 0;
-    bool _is_visible   = false;
+    int _last_opa      = -1;
 
     std::unique_ptr<Label> _label;
+
+    int normalize_index(int index) const
+    {
+        const int count = static_cast<int>(_icon_label_texts.size());
+        index %= count;
+        if (index < 0) {
+            index += count;
+        }
+        return index;
+    }
+
+    void set_opacity(uint8_t opa)
+    {
+        if (_last_opa == opa) {
+            return;
+        }
+        _last_opa = opa;
+        _label->setOpa(opa);
+    }
 };
 
 static std::string _tag        = "LauncherView";
 static constexpr int _icon_gap = 466;
-// Create 5 copies: [0:Backup] [1:Buffer] [2:Main] [3:Buffer] [4:Backup]
-static constexpr int _loop_copies       = 5;
-static constexpr int _center_copy_index = 2;
+// Three copies are enough for the wrap buffer and keep the launcher object tree smaller.
+static constexpr int _loop_copies       = 3;
+static constexpr int _center_copy_index = 1;
 
 static int _last_clicked_icon_pos_x = -1;
 static std::unique_ptr<PageIndicator> _page_indicator;
@@ -209,6 +240,8 @@ LauncherView::~LauncherView()
     _panel.reset();
     _page_indicator.reset();
     _dynamic_icon_label.reset();
+    _app_count           = 0;
+    _has_scroll_snapshot = false;
 }
 
 void LauncherView::init(std::vector<mooncake::AppProps_t> appPorps)
@@ -234,10 +267,21 @@ void LauncherView::init(std::vector<mooncake::AppProps_t> appPorps)
     lv_obj_set_scroll_snap_x(_panel->get(), LV_SCROLL_SNAP_CENTER);
 
     /* ---------------------------------- Icons --------------------------------- */
+    _app_count = static_cast<int>(appPorps.size());
+    if (_app_count <= 0) {
+        return;
+    }
+
     int icon_x = 0;
     int icon_y = -15;
     std::vector<std::string> icon_label_texts;
-    std::vector<uint32_t> step_colors;
+    icon_label_texts.reserve(appPorps.size());
+    for (const auto& props : appPorps) {
+        icon_label_texts.push_back(props.info.name);
+    }
+
+    _icon_panels.reserve(_app_count * _loop_copies);
+    _icon_images.reserve(_app_count * _loop_copies);
 
     // Loop multiple times to create fake infinite scroll
     for (int loop = 0; loop < _loop_copies; loop++) {
@@ -258,15 +302,6 @@ void LauncherView::init(std::vector<mooncake::AppProps_t> appPorps)
                 _clicked_app_id          = app_id;
                 _last_clicked_icon_pos_x = pos_x;
             });
-
-            // Keep track of data for helpers
-            icon_label_texts.push_back(props.info.name);
-
-            uint32_t color = 0xDADADA;
-            if (props.info.userData != nullptr) {
-                color = *(uint32_t*)props.info.userData;
-            }
-            step_colors.push_back(color);
 
             // Icon image
             if (props.info.icon != nullptr) {
@@ -325,12 +360,10 @@ void LauncherView::init(std::vector<mooncake::AppProps_t> appPorps)
     _clock->addFlag(LV_OBJ_FLAG_FLOATING);
 
     /* ----------------------------- History restore ---------------------------- */
-    bool need_restore      = false;
-    int restore_icon_pos_x = -1;
-
     // Normal start pos (Center of the repeated sets)
     int base_offset_rounds = _center_copy_index * appPorps.size();
     int default_start_x    = base_offset_rounds * _icon_gap;
+    int restore_icon_pos_x = default_start_x;
 
     // // If warm boot was requested
     // if (GetHAL().getWarmRebootTarget() >= 0) {
@@ -348,18 +381,17 @@ void LauncherView::init(std::vector<mooncake::AppProps_t> appPorps)
         // Just restore where they left off, it should be in a valid range
         // mclog::tagInfo(_tag, "navigate to last clicked icon, pos x: {}", _last_clicked_icon_pos_x);
         restore_icon_pos_x       = _last_clicked_icon_pos_x;
-        need_restore             = true;
         _last_clicked_icon_pos_x = -1;
     }
 
-    if (need_restore) {
-        _panel->scrollBy(-restore_icon_pos_x, 0, LV_ANIM_OFF);
+    _panel->scrollBy(-restore_icon_pos_x, 0, LV_ANIM_OFF);
 
-        _page_indicator->jumpTo(restore_icon_pos_x / _icon_gap);
-        _dynamic_icon_label->jumpTo(restore_icon_pos_x / _icon_gap);
+    _page_indicator->jumpTo(restore_icon_pos_x / _icon_gap);
+    _dynamic_icon_label->jumpTo(restore_icon_pos_x / _icon_gap);
 
-        _state = STATE_NORMAL;
-    }
+    _last_scroll_x          = restore_icon_pos_x;
+    _has_scroll_snapshot    = true;
+    _state                  = STATE_NORMAL;
 
     // Destory boot logo label
     GetHAL().bootLogo.reset();
@@ -420,10 +452,13 @@ void LauncherView::handle_state_normal()
     handle_scroll_in_loop();
 
     int scroll_x = _panel->getScrollX();
-    // mclog::tagInfo(_tag, "scroll x: {}", scroll_x);
+    if (!_has_scroll_snapshot || scroll_x != _last_scroll_x) {
+        _page_indicator->update(scroll_x);
+        _dynamic_icon_label->update(scroll_x);
 
-    _page_indicator->update(scroll_x);
-    _dynamic_icon_label->update(scroll_x);
+        _last_scroll_x       = scroll_x;
+        _has_scroll_snapshot = true;
+    }
 
     if (_clock) {
         _clock->update();
@@ -432,24 +467,20 @@ void LauncherView::handle_state_normal()
 
 void LauncherView::handle_scroll_in_loop()
 {
-    // We get total size from underlying icons count / copies
-    int total_icons   = _icon_panels.size();
-    int icons_per_set = total_icons / _loop_copies;
-    int set_width_px  = icons_per_set * _icon_gap;
+    if (_app_count <= 0) {
+        return;
+    }
 
-    // Check boundaries
-    // If we are mostly in Copy 1, jump to Copy 2
-    // If we are mostly in Copy 3, jump to Copy 2
-    // Copy Index: 0 1 [2] 3 4
+    int set_width_px  = _app_count * _icon_gap;
+
+    // Check boundaries and jump back to the center copy when either buffer copy
+    // is far enough into view.
 
     int current_scroll_x = _panel->getScrollX();
 
-    // Define safe zone (Copy 2)
-    int center_set_start_x = _center_copy_index * set_width_px;
-
     // Thresholds: midpoint of Wrap sets
-    int left_trigger_limit  = 1 * set_width_px + (set_width_px / 2);  // Middle of Set 1
-    int right_trigger_limit = 3 * set_width_px + (set_width_px / 2);  // Middle of Set 3
+    int left_trigger_limit  = (_center_copy_index - 1) * set_width_px + (set_width_px / 2);
+    int right_trigger_limit = (_center_copy_index + 1) * set_width_px + (set_width_px / 2);
 
     // Wrap-around Logic
     // Only perform teleport if we are NOT in an automated scroll animation

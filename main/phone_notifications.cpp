@@ -5,6 +5,7 @@
  */
 #include "phone_notifications.h"
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cstdint>
 #include <cstdio>
@@ -29,7 +30,7 @@ uint32_t g_sequence       = 0;
 bool g_ble_ready          = false;
 bool g_connected          = false;
 bool g_ancs_ready         = false;
-bool g_init_started       = false;
+std::atomic<bool> g_init_started{false};
 
 void ensure_lock()
 {
@@ -986,10 +987,10 @@ void host_task(void* param)
 void phone_notifications_init()
 {
     ensure_lock();
-    if (g_init_started) {
+    bool expected = false;
+    if (!g_init_started.compare_exchange_strong(expected, true)) {
         return;
     }
-    g_init_started = true;
 
 #if CONFIG_BT_ENABLED && CONFIG_BT_NIMBLE_ENABLED
     int rc = nimble_port_init();

@@ -13,6 +13,18 @@ using namespace mooncake;
 
 namespace {
 
+#if LV_FONT_SOURCE_HAN_SANS_SC_16_CJK
+const lv_font_t* notification_text_font()
+{
+    return &lv_font_source_han_sans_sc_16_cjk;
+}
+#else
+const lv_font_t* notification_text_font()
+{
+    return &lv_font_montserrat_18;
+}
+#endif
+
 lv_obj_t* make_label(lv_obj_t* parent, const lv_font_t* font, uint32_t color, int width, lv_text_align_t align)
 {
     auto* label = lv_label_create(parent);
@@ -126,17 +138,17 @@ void AppNotifications::create_ui()
     _time = make_label(panel, &lv_font_montserrat_18, 0x8EA0B5, 150, LV_TEXT_ALIGN_LEFT);
     lv_obj_align(_time, LV_ALIGN_TOP_LEFT, 0, 0);
 
-    _app = make_label(panel, &lv_font_montserrat_18, 0x8EA0B5, 170, LV_TEXT_ALIGN_RIGHT);
+    _app = make_label(panel, notification_text_font(), 0x8EA0B5, 170, LV_TEXT_ALIGN_RIGHT);
     lv_obj_align(_app, LV_ALIGN_TOP_RIGHT, 0, 0);
 
-    _title = make_label(panel, &MontserratSemiBold26, 0xFFFFFF, 350, LV_TEXT_ALIGN_LEFT);
+    _title = make_label(panel, notification_text_font(), 0xFFFFFF, 350, LV_TEXT_ALIGN_LEFT);
     lv_obj_align(_title, LV_ALIGN_TOP_LEFT, 0, 36);
 
-    _body = make_label(panel, &lv_font_montserrat_18, 0xDADDE2, 350, LV_TEXT_ALIGN_LEFT);
-    lv_obj_align(_body, LV_ALIGN_TOP_LEFT, 0, 82);
+    _body = make_label(panel, notification_text_font(), 0xDADDE2, 350, LV_TEXT_ALIGN_LEFT);
+    lv_obj_align(_body, LV_ALIGN_TOP_LEFT, 0, 76);
 
     for (int i = 0; i < _history.size(); ++i) {
-        _history[i] = make_label(_root, &lv_font_montserrat_18, 0xAEB7C2, 390, LV_TEXT_ALIGN_LEFT);
+        _history[i] = make_label(_root, notification_text_font(), 0xAEB7C2, 390, LV_TEXT_ALIGN_LEFT);
         lv_obj_align(_history[i], LV_ALIGN_TOP_MID, 0, 344 + i * 28);
         lv_label_set_long_mode(_history[i], LV_LABEL_LONG_MODE_DOTS);
     }
