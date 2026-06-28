@@ -20,6 +20,21 @@ The private file is ignored by git.
 
 This fork also includes a `Guruguru` launcher menu based on the private `kameware/M5Stopwatch` firmware. It embeds the 9 direction avatar PNGs and switches the face direction from touch position.
 
+## StackRemote menu
+
+`StackRemote` turns the StopWatch into a StackChan ESP-NOW remote controller. Start StackChan's `ESPNOW.REMOTE`
+receiver app, then open `StackRemote` from the launcher.
+It sends the same `ESPNOW_DATA_TYPE_DATA` broadcast frames as the official StackChan stick remote.
+
+- Default channel: `1`
+- Default target ID: `0` broadcast
+- Touch pad: sends yaw / pitch
+- `TOUCH` / `GYRO`: switch between touch pad control and tilt control
+- `HOME`: sends yaw `0`, pitch `450`
+- In `GYRO`, switching into the mode calibrates the current StopWatch angle as center
+- `SPRING` / `HOLD`: return to home on release or keep the last pose
+- `CH`, `ID`, `S`, `LAS`: channel, target id, speed, and laser controls
+
 ## Phone notifications
 
 The `Notify` launcher menu starts a BLE receiver for phone notifications. The watch advertises as `M5StopWatch`.

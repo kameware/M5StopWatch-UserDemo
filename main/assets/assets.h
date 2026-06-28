@@ -24,6 +24,7 @@ LV_IMG_DECLARE(icon_badge);
 LV_IMG_DECLARE(icon_lucky_wheel);
 LV_IMG_DECLARE(icon_watch_face);
 LV_IMG_DECLARE(icon_guruguru);
+LV_IMG_DECLARE(icon_stack_remote);
 
 LV_IMG_DECLARE(classic_hour_hand);
 LV_IMG_DECLARE(classic_minute_hand);

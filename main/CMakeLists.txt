@@ -13,7 +13,10 @@ file(GLOB_RECURSE MY_SRCS
 set(MY_EXTRA_SRCS
     "apps/app_guruguru/app_guruguru.cpp"
     "apps/app_guruguru/view/view.cpp"
+    "apps/app_stack_remote/app_stack_remote.cpp"
+    "apps/app_stack_remote/view/view.cpp"
     "assets/images/guruguru/guruguru_avatar_images.c"
+    "assets/images/icon_stack_remote.c"
 )
 list(APPEND MY_SRCS ${MY_EXTRA_SRCS})
 list(REMOVE_DUPLICATES MY_SRCS)

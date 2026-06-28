@@ -35,6 +35,20 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.8.0
+  espressif/esp-now:
+    component_hash: 217f4e2c1672bcc71e5890fb3659528bbce5f1a8a995b1668fec9374acbd0f45
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: '>=0.5.3'
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 2.5.3
   espressif/esp_codec_dev:
     component_hash: 0d9e9bc288156eb55f79338d312e1ebf8c9dfbd5e7d13ef0f20ccb031b4e15cf
     dependencies:
@@ -67,9 +81,10 @@ direct_dependencies:
 - 78/esp-wifi-connect
 - espressif/cmake_utilities
 - espressif/esp-dsp
+- espressif/esp-now
 - espressif/esp_codec_dev
 - espressif/i2c_bus
 - idf
-manifest_hash: c617373befe8b1fa75c13efe199c02fb007e1c544872d4ec5ecea62d8b7d7b93
+manifest_hash: 12164236d781b52ec4f9d362df885b7e5c1259b8fe147c753641a04c15b74b3a
 target: esp32s3
 version: 2.0.0
