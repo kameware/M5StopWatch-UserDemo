@@ -864,8 +864,6 @@ void advertise()
         0x02, BLE_HS_ADV_TYPE_FLAGS, BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP,
         0x11, BLE_HS_ADV_TYPE_SOL_UUIDS128,
         0xD0, 0x00, 0x2D, 0x12, 0x1E, 0x4B, 0x0F, 0xA4, 0x99, 0x4E, 0xCE, 0xB5, 0x31, 0xF4, 0x05, 0x79,
-        0x05, BLE_HS_ADV_TYPE_INCOMP_NAME, 'M', '5', 'S', 'W',
-        0x03, BLE_HS_ADV_TYPE_APPEARANCE, 0xC0, 0x00,
     };
     static_assert(sizeof(k_adv_data) <= BLE_HS_ADV_MAX_SZ, "advertising data must fit legacy BLE advertising");
 
@@ -876,9 +874,8 @@ void advertise()
     }
 
     static constexpr uint8_t k_scan_response_data[] = {
-        0x11, BLE_HS_ADV_TYPE_COMP_UUIDS128,
-        0x00, 0x57, 0x54, 0x53, 0x4D, 0x53, 0x65, 0x9D, 0x35, 0x4D, 0x6F, 0x6D, 0x01, 0x00, 0x3F, 0x7B,
         0x0C, BLE_HS_ADV_TYPE_COMP_NAME, 'M', '5', 'S', 't', 'o', 'p', 'W', 'a', 't', 'c', 'h',
+        0x02, BLE_HS_ADV_TYPE_TX_PWR_LVL, 0x00,
     };
     static_assert(sizeof(k_scan_response_data) <= BLE_HS_ADV_MAX_SZ, "scan response data must fit legacy BLE advertising");
 
@@ -1004,6 +1001,7 @@ void phone_notifications_init()
     ble_svc_gap_init();
     ble_svc_gatt_init();
     ble_svc_gap_device_name_set("M5StopWatch");
+    ble_svc_gap_device_appearance_set(0x00C0);
 
     rc = ble_gatts_count_cfg(k_services);
     if (rc != 0) {
