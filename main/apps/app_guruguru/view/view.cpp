@@ -7,6 +7,7 @@
 
 #include <assets/assets.h>
 #include <hal/hal.h>
+#include <mooncake_log.h>
 #include <array>
 #include <cmath>
 
@@ -19,6 +20,7 @@ constexpr int _panel_center        = _panel_size / 2;
 constexpr int _avatar_image_size   = 251;
 constexpr int _center_dead_zone_px = 50;
 constexpr float _rad_to_deg        = 57.29577951308232f;
+constexpr const char* _tag         = "Guruguru";
 
 const std::array<const lv_image_dsc_t*, 9> _direction_images = {
     &guruguru_avatar_dir0,
@@ -67,14 +69,14 @@ int direction_from_point(int x, int y)
 
 void GuruguruView::init()
 {
-    _current_direction = 4;
-
     auto& display = GetHAL().getDisplay();
     display.fillScreen(TFT_BLACK);
 
-    if (loadImages()) {
-        render();
+    if (!initBuffers()) {
+        return;
     }
+
+    setDirection(4);
 }
 
 void GuruguruView::trackFace(int x, int y)
@@ -82,31 +84,25 @@ void GuruguruView::trackFace(int x, int y)
     setDirection(direction_from_point(x, y));
 }
 
-bool GuruguruView::loadImages()
+bool GuruguruView::initBuffers()
 {
     auto& display = GetHAL().getDisplay();
 
-    for (std::size_t i = 0; i < _direction_images.size(); ++i) {
-        auto canvas = std::make_unique<M5Canvas>(&display);
-        canvas->setColorDepth(16);
-        if (canvas->createSprite(_avatar_image_size, _avatar_image_size) == nullptr) {
-            _direction_canvases = {};
-            return false;
-        }
-
-        canvas->fillSprite(TFT_BLACK);
-        const auto* image = _direction_images[i];
-        if (!canvas->drawPng(image->data, static_cast<uint32_t>(image->data_size), 0, 0)) {
-            _direction_canvases = {};
-            return false;
-        }
-        _direction_canvases[i] = std::move(canvas);
+    _source_canvas = std::make_unique<M5Canvas>(&display);
+    _source_canvas->setColorDepth(16);
+    _source_canvas->setPsram(true);
+    if (_source_canvas->createSprite(_avatar_image_size, _avatar_image_size) == nullptr) {
+        mclog::tagWarn(_tag, "failed to allocate source sprite");
+        _source_canvas.reset();
+        return false;
     }
 
     _composite = std::make_unique<M5Canvas>(&display);
     _composite->setColorDepth(16);
+    _composite->setPsram(true);
     if (_composite->createSprite(display.width(), display.height()) == nullptr) {
-        _direction_canvases = {};
+        mclog::tagWarn(_tag, "failed to allocate composite sprite");
+        _source_canvas.reset();
         _composite.reset();
         return false;
     }
@@ -114,9 +110,39 @@ bool GuruguruView::loadImages()
     return true;
 }
 
+bool GuruguruView::loadDirection(int direction)
+{
+    if (direction < 0 || direction >= static_cast<int>(_direction_images.size())) {
+        return false;
+    }
+
+    if (!_source_canvas) {
+        return false;
+    }
+
+    if (direction == _loaded_direction) {
+        return true;
+    }
+
+    _source_canvas->fillSprite(TFT_BLACK);
+    const auto* image = _direction_images[direction];
+    if (!_source_canvas->drawPng(image->data, static_cast<uint32_t>(image->data_size), 0, 0)) {
+        mclog::tagWarn(_tag, "failed to decode direction image: {}", direction);
+        _loaded_direction = -1;
+        return false;
+    }
+
+    _loaded_direction = direction;
+    return true;
+}
+
 void GuruguruView::render()
 {
-    if (!_composite || !_direction_canvases[_current_direction]) {
+    if (!_composite || !_source_canvas) {
+        return;
+    }
+
+    if (!loadDirection(_current_direction)) {
         return;
     }
 
@@ -125,8 +151,7 @@ void GuruguruView::render()
     const float zoom_y = static_cast<float>(display.height()) / _avatar_image_size;
 
     _composite->fillSprite(TFT_BLACK);
-    _direction_canvases[_current_direction]->pushRotateZoom(
-        _composite.get(), display.width() / 2, display.height() / 2, 0.0f, zoom_x, zoom_y);
+    _source_canvas->pushRotateZoom(_composite.get(), display.width() / 2, display.height() / 2, 0.0f, zoom_x, zoom_y);
 
     display.startWrite();
     _composite->pushSprite(&display, 0, 0);
@@ -139,7 +164,7 @@ void GuruguruView::setDirection(int direction)
         return;
     }
 
-    if (direction == _current_direction) {
+    if (direction == _current_direction && direction == _loaded_direction) {
         return;
     }
 

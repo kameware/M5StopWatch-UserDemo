@@ -16,11 +16,13 @@ public:
     void trackFace(int x, int y);
 
 private:
-    std::array<std::unique_ptr<M5Canvas>, 9> _direction_canvases;
+    std::unique_ptr<M5Canvas> _source_canvas;
     std::unique_ptr<M5Canvas> _composite;
-    int _current_direction = 4;
+    int _current_direction = -1;
+    int _loaded_direction  = -1;
 
-    bool loadImages();
+    bool initBuffers();
+    bool loadDirection(int direction);
     void render();
     void setDirection(int direction);
 };

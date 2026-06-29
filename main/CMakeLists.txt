@@ -16,6 +16,7 @@ set(MY_EXTRA_SRCS
     "apps/app_stack_remote/app_stack_remote.cpp"
     "apps/app_stack_remote/view/view.cpp"
     "assets/images/guruguru/guruguru_avatar_images.c"
+    "assets/images/icon_notify.c"
     "assets/images/icon_stack_remote.c"
 )
 list(APPEND MY_SRCS ${MY_EXTRA_SRCS})

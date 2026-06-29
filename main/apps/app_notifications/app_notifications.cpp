@@ -48,7 +48,7 @@ void clear_button_event(lv_event_t* event)
 AppNotifications::AppNotifications()
 {
     setAppInfo().name = "Notify";
-    setAppInfo().icon = (void*)&icon_badge;
+    setAppInfo().icon = (void*)&icon_notify;
 }
 
 void AppNotifications::onCreate()

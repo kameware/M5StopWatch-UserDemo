@@ -80,8 +80,188 @@ std::string timestamp_now()
     return buffer;
 }
 
+bool decode_next_utf8(const std::string& text, std::size_t& index, uint32_t& codepoint)
+{
+    if (index >= text.size()) {
+        return false;
+    }
+
+    const auto byte0 = static_cast<unsigned char>(text[index]);
+    if (byte0 < 0x80) {
+        codepoint = byte0;
+        ++index;
+        return true;
+    }
+
+    auto continuation = [&](std::size_t offset) -> int {
+        if (index + offset >= text.size()) {
+            return -1;
+        }
+        const auto byte = static_cast<unsigned char>(text[index + offset]);
+        return (byte & 0xC0) == 0x80 ? byte : -1;
+    };
+
+    uint32_t decoded = 0;
+    std::size_t width = 0;
+    if ((byte0 & 0xE0) == 0xC0) {
+        const int byte1 = continuation(1);
+        if (byte1 < 0) {
+            ++index;
+            return false;
+        }
+        decoded = ((byte0 & 0x1F) << 6) | (byte1 & 0x3F);
+        width   = 2;
+        if (decoded < 0x80) {
+            ++index;
+            return false;
+        }
+    } else if ((byte0 & 0xF0) == 0xE0) {
+        const int byte1 = continuation(1);
+        const int byte2 = continuation(2);
+        if (byte1 < 0 || byte2 < 0) {
+            ++index;
+            return false;
+        }
+        decoded = ((byte0 & 0x0F) << 12) | ((byte1 & 0x3F) << 6) | (byte2 & 0x3F);
+        width   = 3;
+        if (decoded < 0x800 || (decoded >= 0xD800 && decoded <= 0xDFFF)) {
+            ++index;
+            return false;
+        }
+    } else if ((byte0 & 0xF8) == 0xF0) {
+        const int byte1 = continuation(1);
+        const int byte2 = continuation(2);
+        const int byte3 = continuation(3);
+        if (byte1 < 0 || byte2 < 0 || byte3 < 0) {
+            ++index;
+            return false;
+        }
+        decoded = ((byte0 & 0x07) << 18) | ((byte1 & 0x3F) << 12) | ((byte2 & 0x3F) << 6) | (byte3 & 0x3F);
+        width   = 4;
+        if (decoded < 0x10000 || decoded > 0x10FFFF) {
+            ++index;
+            return false;
+        }
+    } else {
+        ++index;
+        return false;
+    }
+
+    index += width;
+    codepoint = decoded;
+    return true;
+}
+
+bool is_emoji_joiner_or_modifier(uint32_t codepoint)
+{
+    return codepoint == 0x200D || codepoint == 0x20E3 || codepoint == 0xFE0E || codepoint == 0xFE0F ||
+           (codepoint >= 0x1F3FB && codepoint <= 0x1F3FF) ||
+           (codepoint >= 0xE0100 && codepoint <= 0xE01EF);
+}
+
+bool is_emoji_codepoint(uint32_t codepoint)
+{
+    return codepoint == 0x00A9 || codepoint == 0x00AE || codepoint == 0x203C || codepoint == 0x2049 ||
+           (codepoint >= 0x2122 && codepoint <= 0x2139) ||
+           (codepoint >= 0x2194 && codepoint <= 0x21AA) ||
+           (codepoint >= 0x231A && codepoint <= 0x27BF) ||
+           (codepoint >= 0x1F000 && codepoint <= 0x1FAFF);
+}
+
+const char* emoji_replacement(uint32_t codepoint)
+{
+    switch (codepoint) {
+        case 0x2705:
+        case 0x1F44D:
+        case 0x1F44C:
+            return "OK";
+        case 0x274C:
+        case 0x1F44E:
+            return "NG";
+        case 0x26A0:
+        case 0x2757:
+        case 0x2755:
+            return "!";
+        case 0x2753:
+        case 0x2754:
+        case 0x1F914:
+            return "?";
+        case 0x2665:
+        case 0x2764:
+        case 0x1F495:
+        case 0x1F496:
+        case 0x1F497:
+        case 0x1F498:
+        case 0x1F499:
+        case 0x1F49A:
+        case 0x1F49B:
+        case 0x1F49C:
+        case 0x1F5A4:
+        case 0x1F60D:
+            return "<3";
+        case 0x1F602:
+        case 0x1F923:
+            return "LOL";
+        case 0x1F622:
+        case 0x1F62D:
+            return "T_T";
+        case 0x1F64F:
+            return "THX";
+        case 0x1F4AF:
+            return "100";
+        case 0x1F525:
+            return "HOT";
+        case 0x1F389:
+            return "YAY";
+        case 0x2B50:
+        case 0x2605:
+        case 0x2606:
+            return "*";
+        default:
+            break;
+    }
+
+    if (codepoint >= 0x1F600 && codepoint <= 0x1F64F) {
+        return ":)";
+    }
+    if (is_emoji_codepoint(codepoint)) {
+        return "*";
+    }
+    return nullptr;
+}
+
+std::string replace_emoji_with_ascii(const std::string& value)
+{
+    std::string output;
+    output.reserve(value.size());
+
+    std::size_t index = 0;
+    while (index < value.size()) {
+        const std::size_t start = index;
+        uint32_t codepoint = 0;
+        if (!decode_next_utf8(value, index, codepoint)) {
+            output += '?';
+            continue;
+        }
+
+        if (is_emoji_joiner_or_modifier(codepoint)) {
+            continue;
+        }
+
+        if (const char* replacement = emoji_replacement(codepoint)) {
+            output += replacement;
+            continue;
+        }
+
+        output.append(value, start, index - start);
+    }
+
+    return output;
+}
+
 std::string compact_text(std::string value, std::size_t max_bytes, const char* fallback)
 {
+    value = replace_emoji_with_ascii(value);
     std::replace(value.begin(), value.end(), '\r', ' ');
     std::replace(value.begin(), value.end(), '\n', ' ');
     while (!value.empty() && value.front() == ' ') {
